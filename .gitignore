@@ -1,0 +1,34 @@
+# Visual Studio / C++ ignore list
+.vs/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rm/
+[Aa]rm64/
+*.aps
+*.appx
+*.appxbundle
+*.appxrecipe
+*.builds
+*.opendb
+*.opensdf
+*.sdf
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.tlog
+*.obj
+*.pch
+*.res
+*.idb
+*.pdb
+*.ilk
+*.exp
+*.log
+*.ipch
+
+# Output files
+01-TBE/Debug/
+01-TBE/Release/
