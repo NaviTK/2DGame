@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Prueba de animaciones - Bomberman</title>
+<style>
+  body { background:#1d1f26; color:#ddd; font-family:Segoe UI, sans-serif; margin:20px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  h2 { font-size:16px; margin:24px 0 8px; color:#9cf; }
+  .hint { color:#888; font-size:13px; }
+  canvas { image-rendering:pixelated; image-rendering:crisp-edges; }
+  #sheet { background:#7bb47b; border:1px solid #444; }
+  .cards { display:flex; flex-wrap:wrap; gap:12px; }
+  .card { background:#2a2d36; border-radius:8px; padding:10px; width:170px; }
+  .card canvas { background:#7bb47b; display:block; margin:0 auto 6px; border-radius:4px; }
+  .card .name { font-weight:600; font-size:14px; }
+  .card input { width:100%; box-sizing:border-box; background:#16181d; color:#cfc; border:1px solid #444;
+                font-family:Consolas, monospace; font-size:12px; padding:3px; margin-top:4px; }
+  .controls { display:flex; gap:20px; align-items:center; margin:8px 0; }
+  #play { background:#3d8a3d; border:2px solid #444; }
+  code { background:#2a2d36; padding:1px 4px; border-radius:3px; }
+</style>
+</head>
+<body>
+<h1>Prueba de animaciones del protagonista</h1>
+<div class="hint">Fuente: <code>01-TBE/images/caracters.gif</code> (filas 1 y 2). Cada frame se recorta como una celda fija de
+  <span id="cellInfo"></span> px alineada abajo-centro (igual que lo haría <code>Sprite</code> en el juego).</div>
+
+<h2>1. Frames detectados</h2>
+<div class="hint">A = fila 1, B = fila 2. Las celdas amarillas son lo que se recorta para cada frame.</div>
+<canvas id="sheet"></canvas>
+
+<h2>2. Animaciones</h2>
+<div class="controls">
+  <label>Velocidad: <input type="range" id="fps" min="2" max="16" value="8"> <span id="fpsVal">8</span> fps</label>
+  <label>Zoom: <input type="range" id="zoom" min="2" max="8" value="6"> <span id="zoomVal">6</span>x</label>
+</div>
+<div class="hint">Puedes editar las secuencias. Formato: <code>A0,A1,B3</code>; añade <code>m</code> para espejar (p.ej. <code>A1m</code>).</div>
+<div class="cards" id="cards"></div>
+
+<h2>3. Prueba jugable</h2>
+<div class="hint">Mueve al personaje con <b>flechas</b> o <b>WASD</b>. Usa las secuencias de arriba.</div>
+<canvas id="play"></canvas>
+
+<script>
+// ---- Bounding boxes medidas sobre caracters.gif (x, y, w, h) ----
+const BOXES = {
+  A0:[6,2,12,16],  A1:[20,2,15,16], A2:[37,2,14,16], A3:[53,4,14,14], A4:[69,2,15,16],
+  A5:[86,2,16,14], A6:[104,2,16,16],A7:[122,2,16,16],A8:[140,2,16,16],
+  B0:[2,20,15,16], B1:[19,21,16,16],B2:[37,21,16,16],B3:[55,21,14,16], B4:[71,21,16,16],
+  B5:[89,21,17,16],B6:[108,21,15,16],B7:[125,21,16,16],B8:[143,21,16,16],
+};
+const CELL_W = 17, CELL_H = 17;
+const ROW_BOTTOM = { A: 17, B: 36 };   // última fila de píxeles de cada fila del sheet
+document.getElementById('cellInfo').textContent = CELL_W + 'x' + CELL_H;
+
+// Celda fija por frame: centrada en X sobre el sprite, apoyada en la base de la fila
+const CELLS = {};
+for (const [id, [x, y, w, h]] of Object.entries(BOXES)) {
+  CELLS[id] = { x: x - Math.floor((CELL_W - w) / 2), y: ROW_BOTTOM[id[0]] - CELL_H + 1 };
+}
+CELLS.A0.x = 3; // centrado exacto invadiría 1 px de A1 (x=20)
+
+// ---- Animaciones (editables) ----
+const ANIMS = [
+  { key:'idleDown',  name:'Quieto (abajo)',      seq:'B1' },
+  { key:'walkDown',  name:'Andar abajo',         seq:'B0,B1,B3,B1' },
+  { key:'walkLeft',  name:'Andar izquierda',     seq:'A0,A1,A0,A2' },
+  { key:'walkRight', name:'Andar derecha',       seq:'A0m,A1m,A0m,A2m' },
+  { key:'walkUp',    name:'Andar arriba (*)',    seq:'A8,A8m' },
+  { key:'idleLeft',  name:'Quieto (izquierda)',  seq:'A0' },
+  { key:'idleRight', name:'Quieto (derecha)',    seq:'A0m' },
+  { key:'idleUp',    name:'Quieto (arriba)',     seq:'A8' },
+  { key:'death',     name:'Muerte',              seq:'B1,B4,B5,B6' },
+  { key:'extra1',    name:'Extra: giro',         seq:'A6,A7' },
+  { key:'extra2',    name:'Extra: aturdido',     seq:'B7,B8' },
+  { key:'extra3',    name:'Extra: salto/otros',  seq:'A3,A4,A5' },
+];
+
+function parseSeq(s) {
+  return s.split(',').map(t => t.trim()).filter(Boolean).map(t => {
+    const mirror = t.endsWith('m');
+    const id = mirror ? t.slice(0, -1) : t;
+    return CELLS[id] ? { id, mirror } : null;
+  }).filter(Boolean);
+}
+ANIMS.forEach(a => a.frames = parseSeq(a.seq));
+
+const img = new Image();
+img.src = '../01-TBE/images/caracters.gif';
+
+function drawFrame(ctx, f, dx, dy, scale) {
+  const c = CELLS[f.id];
+  ctx.save();
+  if (f.mirror) {
+    ctx.translate(dx + CELL_W * scale, dy);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, c.x, c.y, CELL_W, CELL_H, 0, 0, CELL_W * scale, CELL_H * scale);
+  } else {
+    ctx.drawImage(img, c.x, c.y, CELL_W, CELL_H, dx, dy, CELL_W * scale, CELL_H * scale);
+  }
+  ctx.restore();
+}
+
+// ---- 1. Sheet ----
+function drawSheet() {
+  const s = 5, W = 162, H = 39;
+  const cv = document.getElementById('sheet');
+  cv.width = W * s; cv.height = H * s;
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 0, 0, W, H, 0, 0, W * s, H * s);
+  ctx.font = 'bold 12px Consolas';
+  for (const [id, c] of Object.entries(CELLS)) {
+    ctx.strokeStyle = 'rgba(255,220,0,0.9)';
+    ctx.strokeRect(c.x * s + 0.5, c.y * s + 0.5, CELL_W * s - 1, CELL_H * s - 1);
+    ctx.fillStyle = '#000'; ctx.fillRect(c.x * s + 1, c.y * s + 1, 22, 13);
+    ctx.fillStyle = '#ff0'; ctx.fillText(id, c.x * s + 3, c.y * s + 12);
+  }
+}
+
+// ---- 2. Cards ----
+let fps = 8, zoom = 6;
+const cardCanvases = [];
+function buildCards() {
+  const root = document.getElementById('cards');
+  ANIMS.forEach(a => {
+    const d = document.createElement('div'); d.className = 'card';
+    const cv = document.createElement('canvas');
+    const n = document.createElement('div'); n.className = 'name'; n.textContent = a.name;
+    const inp = document.createElement('input'); inp.value = a.seq;
+    inp.oninput = () => { a.seq = inp.value; a.frames = parseSeq(inp.value); };
+    d.append(cv, n, inp); root.append(d);
+    cardCanvases.push({ cv, a });
+  });
+}
+
+// ---- 3. Playground ----
+const TILE = 16, MAP_W = 13, MAP_H = 9, PSCALE = 3;
+const MAP = [];
+for (let y = 0; y < MAP_H; y++) {
+  MAP.push([]);
+  for (let x = 0; x < MAP_W; x++)
+    MAP[y].push(x === 0 || y === 0 || x === MAP_W - 1 || y === MAP_H - 1 || (x % 2 === 0 && y % 2 === 0) ? 1 : 0);
+}
+const player = { x: TILE, y: TILE, dir: 'Down', moving: false, t: 0 };
+const keys = {};
+addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (e.key.startsWith('Arrow')) e.preventDefault(); });
+addEventListener('keyup',   e => { keys[e.key.toLowerCase()] = false; });
+
+function solidAt(px, py) { return MAP[Math.floor(py / TILE)][Math.floor(px / TILE)] === 1; }
+function blocked(x, y) {
+  const m = 2; // hitbox algo menor que el tile
+  return solidAt(x + m, y + m) || solidAt(x + TILE - 1 - m, y + m) ||
+         solidAt(x + m, y + TILE - 1 - m) || solidAt(x + TILE - 1 - m, y + TILE - 1 - m);
+}
+function updatePlayer(dt) {
+  const sp = 0.06 * dt;
+  let dx = 0, dy = 0;
+  if (keys['arrowleft'] || keys['a']) { dx = -sp; player.dir = 'Left'; }
+  else if (keys['arrowright'] || keys['d']) { dx = sp; player.dir = 'Right'; }
+  else if (keys['arrowup'] || keys['w']) { dy = -sp; player.dir = 'Up'; }
+  else if (keys['arrowdown'] || keys['s']) { dy = sp; player.dir = 'Down'; }
+  player.moving = dx !== 0 || dy !== 0;
+  if (dx && !blocked(player.x + dx, player.y)) player.x += dx;
+  if (dy && !blocked(player.x, player.y + dy)) player.y += dy;
+  // ayuda en esquinas: alinear al pasillo
+  if (dx) { const ty = Math.round(player.y / TILE) * TILE; player.y += Math.sign(ty - player.y) * Math.min(sp, Math.abs(ty - player.y)); }
+  if (dy) { const tx = Math.round(player.x / TILE) * TILE; player.x += Math.sign(tx - player.x) * Math.min(sp, Math.abs(tx - player.x)); }
+}
+function drawPlay(time) {
+  const cv = document.getElementById('play');
+  cv.width = MAP_W * TILE * PSCALE; cv.height = MAP_H * TILE * PSCALE;
+  const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
+  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+    const X = x * TILE * PSCALE, Y = y * TILE * PSCALE, S = TILE * PSCALE;
+    if (MAP[y][x]) { ctx.fillStyle = '#777'; ctx.fillRect(X, Y, S, S); ctx.fillStyle = '#999'; ctx.fillRect(X + 3, Y + 3, S - 6, S - 6); }
+    else { ctx.fillStyle = (x + y) % 2 ? '#3d8a3d' : '#43933f'; ctx.fillRect(X, Y, S, S); }
+  }
+  const anim = ANIMS.find(a => a.key === (player.moving ? 'walk' : 'idle') + player.dir);
+  if (anim && anim.frames.length) {
+    const f = anim.frames[Math.floor(time / (1000 / fps)) % anim.frames.length];
+    // el sprite (17 px) se dibuja apoyado sobre la base del tile
+    drawFrame(ctx, f, (player.x - (CELL_W - TILE) / 2) * PSCALE, (player.y - (CELL_H - TILE)) * PSCALE, PSCALE);
+  }
+  ctx.fillStyle = '#fff'; ctx.font = '14px Consolas';
+  ctx.fillText(anim ? anim.key : '', 6, 16);
+}
+
+// ---- Loop ----
+let last = 0;
+function loop(time) {
+  const dt = Math.min(50, time - last); last = time;
+  for (const { cv, a } of cardCanvases) {
+    cv.width = CELL_W * zoom; cv.height = CELL_H * zoom;
+    const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
+    if (a.frames.length) drawFrame(ctx, a.frames[Math.floor(time / (1000 / fps)) % a.frames.length], 0, 0, zoom);
+  }
+  updatePlayer(dt);
+  drawPlay(time);
+  requestAnimationFrame(loop);
+}
+
+document.getElementById('fps').oninput = e => { fps = +e.target.value; document.getElementById('fpsVal').textContent = fps; };
+document.getElementById('zoom').oninput = e => { zoom = +e.target.value; document.getElementById('zoomVal').textContent = zoom; };
+
+img.onload = () => { drawSheet(); buildCards(); requestAnimationFrame(loop); };
+img.onerror = () => document.body.insertAdjacentHTML('afterbegin',
+  '<p style="color:#f66">No se pudo cargar ../01-TBE/images/caracters.gif. Abre este HTML desde la carpeta 2DGame/tools.</p>');
+</script>
+</body>
+</html>

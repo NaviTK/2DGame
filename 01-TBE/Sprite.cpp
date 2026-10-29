@@ -1,4 +1,5 @@
 #include <GL/glew.h>
+#include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 #include "Sprite.h"
 
@@ -73,6 +74,8 @@ void Sprite::render() const
 			glm::vec2 disp = anim.keyframes[currentKeyframe].displacement;
 			glm::vec2 texCoord0 = glm::vec2(disp.x * sizeInSpritesheet_.x, disp.y * sizeInSpritesheet_.y);
 			glm::vec2 texCoord1 = texCoord0 + sizeInSpritesheet_;
+			if(anim.keyframes[currentKeyframe].flipX)
+				std::swap(texCoord0.x, texCoord1.x);
 
 			float vertices[] = {
 				0.f, 0.f, texCoord0.x, texCoord0.y,
@@ -114,12 +117,13 @@ void Sprite::setAnimationSpeed(int animId, int keyframesPerSec)
 	}
 }
 
-void Sprite::addKeyframe(int animId, const glm::vec2 &displacement)
+void Sprite::addKeyframe(int animId, const glm::vec2 &displacement, bool flipX)
 {
 	if(animId >= 0 && animId < int(animations.size()))
 	{
 		AnimKeyframe kf;
 		kf.displacement = displacement;
+		kf.flipX = flipX;
 		animations[animId].keyframes.push_back(kf);
 	}
 }

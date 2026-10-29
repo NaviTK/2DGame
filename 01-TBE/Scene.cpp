@@ -44,14 +44,35 @@ void Scene::init()
 
 	// Passing glm::vec2(0.0f) lets TileMap automatically center the map inside 640x480
 	map = TileMap::createTileMap("levels/level01.txt", glm::vec2(0.0f), texProgram);
-	projection = glm::ortho(0.f, float(CAMERA_WIDTH), float(CAMERA_HEIGHT), 0.f);
 
 	float tSize = float(map->getBlockSize());
+	glm::vec2 minCoords = map->getMinCoords();
+	float mapW = map->getMapWidth() * tSize;
+	float mapH = map->getMapHeight() * tSize;
+
+	// Orthographic camera zoomed to frame the tilemap while preserving 4:3 window aspect ratio
+	float windowAspect = float(CAMERA_WIDTH) / float(CAMERA_HEIGHT);
+	float mapAspect = mapW / mapH;
+	float viewW = mapW, viewH = mapH;
+	if(mapAspect > windowAspect)
+		viewH = mapW / windowAspect;
+	else
+		viewW = mapH * windowAspect;
+
+	float pad = tSize * 0.5f;
+	viewW += pad * 2.0f;
+	viewH += pad * 2.0f;
+
+	float centerX = minCoords.x + mapW * 0.5f;
+	float centerY = minCoords.y + mapH * 0.5f;
+	projection = glm::ortho(centerX - viewW * 0.5f, centerX + viewW * 0.5f,
+	                        centerY + viewH * 0.5f, centerY - viewH * 0.5f);
 
 	if(!map->getPlayerSpawns().empty())
 		player.init(map->tileToWorld(map->getPlayerSpawns()[0]), tSize);
 	else
 		player.init(map->tileToWorld(glm::ivec2(1, 1)), tSize);
+	player.initSprite(texProgram);
 
 	for(const auto &spawn : map->getEnemySpawns())
 	{
@@ -166,15 +187,14 @@ void Scene::render()
 		}
 	}
 
-	// 6. Render player (cyan quad)
+	// 6. Render player (animated sprite, greyed out when dead)
+	texProgram.use();
+	texProgram.setUniformMatrix4f("projection", projection);
 	if(player.isAlive())
-	{
-		renderQuad(player.getHitboxPos(), player.getHitboxSize(), glm::vec4(0.1f, 0.8f, 0.95f, 1.0f));
-	}
+		texProgram.setUniform4f("color", 1.0f, 1.0f, 1.0f, 1.0f);
 	else
-	{
-		renderQuad(player.getHitboxPos(), player.getHitboxSize(), glm::vec4(0.4f, 0.4f, 0.4f, 1.0f));
-	}
+		texProgram.setUniform4f("color", 0.4f, 0.4f, 0.4f, 1.0f);
+	player.render();
 
 	// 7. Debug Draw: Colisiones
 	renderDebugDraw();
@@ -520,4 +540,3 @@ void Scene::cleanupEntities()
 			++it;
 	}
 }
-

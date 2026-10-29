@@ -46,7 +46,7 @@ public:
 
 	void setNumberAnimations(int nAnimations);
 	void setAnimationSpeed(int animId, int keyframesPerSec);
-	void addKeyframe(int animId, const glm::vec2 &displacement);
+	void addKeyframe(int animId, const glm::vec2 &displacement, bool flipX = false);
 	void changeAnimation(int animId);
 
 	void setPosition(const glm::vec2 &pos);
@@ -58,6 +58,7 @@ private:
 	struct AnimKeyframe
 	{
 		glm::vec2 displacement;
+		bool flipX; // Mirror the frame horizontally (e.g. reuse left-facing frames for right)
 	};
 
 	struct Animation

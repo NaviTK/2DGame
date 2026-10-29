@@ -8,7 +8,7 @@
 class TileMap;
 
 
-// Simple enemy with random-walk AI.
+// Simple enemy with platformer gravity and patrolling AI.
 // Dynamically scales to any tile size (16, 32, etc.)
 
 
@@ -30,9 +30,10 @@ public:
 
 private:
 	glm::vec2 pos;
+	float velY;
 	float speed;
 	float tileSize_;
-	int direction;   // 0=up, 1=down, 2=left, 3=right
+	int direction;   // 2=left, 3=right
 	float dirTimer;  // ms until next random direction change
 	bool alive;
 
@@ -40,4 +41,3 @@ private:
 
 
 #endif // _ENEMY_INCLUDE
-
