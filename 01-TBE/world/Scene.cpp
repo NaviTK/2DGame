@@ -1,0 +1,786 @@
+#include <iostream>
+#include <cmath>
+#include <cstdlib>
+#include <algorithm>
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+#include <glm/gtc/matrix_transform.hpp>
+#include "Scene.h"
+#include "Game.h"
+
+
+using namespace std;
+
+
+Scene::Scene()
+{
+	map = NULL;
+	quadVAO = 0;
+	quadVBO = 0;
+	gameOver = false;
+	win = false;
+	currentTime = 0.0f;
+	cameraCenter = glm::vec2(0.0f);
+	cameraViewSize = glm::vec2(160.0f, 120.0f);
+	currentLevel = 1;
+	prevKey1 = false;
+	prevKey2 = false;
+	prevKeyR = false;
+	prevKeyH = false;
+	showHitboxes = false;
+	activeEnemies.reserve(MAX_ENEMIES * 2);
+}
+
+Scene::~Scene()
+{
+	if(map != NULL)
+		delete map;
+	if(quadVAO != 0)
+		glDeleteVertexArrays(1, &quadVAO);
+	if(quadVBO != 0)
+		glDeleteBuffers(1, &quadVBO);
+}
+
+void Scene::init()
+{
+	initShaders();
+	initQuadVAO();
+	loadLevel(1);
+}
+
+void Scene::loadLevel(int levelIndex)
+{
+	currentLevel = levelIndex;
+	currentTime = 0.0f;
+	gameOver = false;
+	win = false;
+	bombs.releaseAll();
+	explosions.releaseAll();
+	powerups.releaseAll();
+	pinkEnemies.releaseAll();
+	kirbyEnemies.releaseAll();
+	activeEnemies.clear();
+
+	if(map != NULL)
+	{
+		delete map;
+		map = NULL;
+	}
+
+	string levelFile = (levelIndex == 2) ? "levels/level02.txt" : "levels/level01.txt";
+	map = TileMap::createTileMap(levelFile, glm::vec2(0.0f), texProgram);
+
+	float tSize = float(map->getBlockSize());
+
+	if(!map->getPlayerSpawns().empty())
+		player.init(map->tileToWorld(map->getPlayerSpawns()[0]), tSize);
+	else
+		player.init(map->tileToWorld(glm::ivec2(1, 1)), tSize);
+	player.initSprite(texProgram);
+
+	// Spawn enemies from the level configuration tags (ENEMY_SPAWN <TYPE> <x> <y>)
+	for(const auto &spawn : map->getEnemySpawns())
+	{
+		Enemy *enemy = NULL;
+		if(spawn.type == "KIRBY")
+			enemy = kirbyEnemies.acquire();
+		else
+			enemy = pinkEnemies.acquire();
+
+		if(enemy != NULL)
+		{
+			enemy->init(map->tileToWorld(spawn.tilePos), tSize);
+			enemy->initSprite(texProgram);
+			activeEnemies.push_back(enemy);
+		}
+	}
+
+	// Initialize Pocket Bomberman camera centered on the player and clamped to map bounds
+	updateCamera(0, true);
+}
+
+void Scene::updateCamera(int deltaTime, bool instant)
+{
+	if(map == NULL)
+		return;
+
+	float tSize = float(map->getBlockSize());
+	glm::vec2 minCoords = map->getMinCoords();
+	float mapW = map->getMapWidth() * tSize;
+	float mapH = map->getMapHeight() * tSize;
+
+	// Pocket Bomberman (Game Boy) style zoomed viewport: 10 x 7.5 tiles (160x120 px for 16px tiles),
+	// preserving the 4:3 window aspect ratio while magnifying sprites 6x on a 960x720 window.
+	float viewW = 10.0f * tSize;
+	float viewH = 7.5f * tSize;
+	cameraViewSize = glm::vec2(viewW, viewH);
+
+	glm::vec2 target = player.getHitboxPos() + player.getHitboxSize() * 0.5f;
+
+	if(instant)
+	{
+		cameraCenter = target;
+	}
+	else
+	{
+		int dt = (deltaTime > 40) ? 40 : deltaTime;
+		float followFactor = std::min(1.0f, 0.015f * float(dt));
+		cameraCenter += (target - cameraCenter) * followFactor;
+	}
+
+	// Clamp camera inside the level bounds so nothing outside the outer walls is shown
+	float halfW = viewW * 0.5f;
+	float halfH = viewH * 0.5f;
+
+	if(mapW <= viewW)
+		cameraCenter.x = minCoords.x + mapW * 0.5f;
+	else
+		cameraCenter.x = std::max(minCoords.x + halfW, std::min(cameraCenter.x, minCoords.x + mapW - halfW));
+
+	if(mapH <= viewH)
+		cameraCenter.y = minCoords.y + mapH * 0.5f;
+	else
+		cameraCenter.y = std::max(minCoords.y + halfH, std::min(cameraCenter.y, minCoords.y + mapH - halfH));
+
+	projection = glm::ortho(cameraCenter.x - halfW, cameraCenter.x + halfW,
+	                        cameraCenter.y + halfH, cameraCenter.y - halfH);
+}
+
+void Scene::update(int deltaTime)
+{
+	currentTime += float(deltaTime);
+
+	// Level switching shortcuts: '1' -> level01, '2' -> level02, 'R' -> restart current level
+	bool k1 = Game::instance().getKey(GLFW_KEY_1);
+	bool k2 = Game::instance().getKey(GLFW_KEY_2);
+	bool kR = Game::instance().getKey(GLFW_KEY_R);
+	if(k1 && !prevKey1) loadLevel(1);
+	if(k2 && !prevKey2) loadLevel(2);
+	if(kR && !prevKeyR) loadLevel(currentLevel);
+	prevKey1 = k1;
+	prevKey2 = k2;
+	prevKeyR = kR;
+
+	// 'H' toggles the debug hitbox overlay (works even on game over / win screens)
+	bool kH = Game::instance().getKey(GLFW_KEY_H);
+	if(kH && !prevKeyH)
+		showHitboxes = !showHitboxes;
+	prevKeyH = kH;
+
+	if(gameOver || win)
+		return;
+
+	if(map != NULL)
+		map->update(deltaTime);
+
+	player.update(deltaTime, map);
+
+	glm::vec2 pHitboxPos = player.getHitboxPos();
+	glm::vec2 pHitboxSize = player.getHitboxSize();
+	bool pAlive = player.isAlive();
+
+	for(size_t i = 0; i < activeEnemies.size(); i++)
+	{
+		if(activeEnemies[i]->isActive())
+		{
+			activeEnemies[i]->setTargetPlayer(pHitboxPos, pHitboxSize, pAlive);
+			activeEnemies[i]->update(deltaTime, map);
+		}
+	}
+
+	for(size_t i = 0; i < bombs.capacity(); i++)
+	{
+		if(bombs[i].isActive())
+			bombs[i].update(deltaTime);
+	}
+
+	for(size_t i = 0; i < explosions.capacity(); i++)
+	{
+		if(explosions[i].isActive())
+			explosions[i].update(deltaTime);
+	}
+
+	handleBombPlacement();
+	handleExplosions();
+	handlePowerUpCollection();
+	checkEntityCollisions();
+	cleanupEntities();
+	updateCamera(deltaTime, false);
+
+	bool allEnemiesCleared = true;
+	for(size_t i = 0; i < activeEnemies.size(); i++)
+	{
+		if(activeEnemies[i]->isAlive())
+		{
+			allEnemiesCleared = false;
+			break;
+		}
+	}
+
+	// Also allow reaching the exit door (TILE_EXIT_DOOR) to advance from level 1 to level 2
+	glm::ivec2 pTile = player.getTilePosition(map);
+	if(map->isExitDoor(pTile.x, pTile.y) && allEnemiesCleared)
+	{
+		if(currentLevel == 1)
+			loadLevel(2);
+		else
+			win = true;
+	}
+
+	if(!player.isAlive())
+		gameOver = true;
+	else if(allEnemiesCleared && currentLevel == 2)
+		win = true;
+}
+
+void Scene::render()
+{
+	// 1. Render tile map
+	texProgram.use();
+	texProgram.setUniformMatrix4f("projection", projection);
+	texProgram.setUniform4f("color", 1.0f, 1.0f, 1.0f, 1.0f);
+	glm::mat4 modelview = glm::mat4(1.0f);
+	texProgram.setUniformMatrix4f("modelview", modelview);
+	if(map != NULL)
+		map->render();
+
+	float tSize = float(map->getBlockSize());
+
+	// 2. Render power-ups (centered in tile)
+	for(const auto &pw : powerups)
+	{
+		if(pw.isActive() && !pw.isCollected())
+		{
+			glm::vec4 color;
+			switch(pw.getType())
+			{
+			case EXTRA_BOMB:
+				color = glm::vec4(0.2f, 0.5f, 1.0f, 1.0f); // Blue
+				break;
+			case BOMB_RANGE:
+				color = glm::vec4(1.0f, 0.85f, 0.1f, 1.0f); // Yellow
+				break;
+			case SPEED_UP:
+				color = glm::vec4(0.1f, 0.9f, 0.3f, 1.0f); // Green
+				break;
+			}
+			renderQuad(pw.getPosition() + glm::vec2(tSize * 0.2f), glm::vec2(tSize * 0.6f), color);
+		}
+	}
+
+	// 3. Render bombs (3-second animated fuse from row 3 of caracters.png)
+	texProgram.use();
+	texProgram.setUniformMatrix4f("projection", projection);
+	texProgram.setUniform4f("color", 1.0f, 1.0f, 1.0f, 1.0f);
+	for(const auto &b : bombs)
+	{
+		if(b.isActive() && !b.hasExploded())
+		{
+			b.render(texProgram, tSize);
+		}
+	}
+
+	// 4. Render explosions (directional sprites from rows 4, 5, 6 of caracters.png)
+	for(const auto &exp : explosions)
+	{
+		if(exp.isActive() && !exp.isFinished())
+		{
+			exp.render(texProgram, map);
+		}
+	}
+
+	// 5. Render enemies (animated sprites from caracters.png)
+	texProgram.use();
+	texProgram.setUniformMatrix4f("projection", projection);
+	texProgram.setUniform4f("color", 1.0f, 1.0f, 1.0f, 1.0f);
+	for(size_t i = 0; i < activeEnemies.size(); i++)
+	{
+		if(activeEnemies[i]->isActive())
+		{
+			activeEnemies[i]->render();
+		}
+	}
+
+	// 6. Render player (animated sprite, greyed out when dead)
+	texProgram.use();
+	texProgram.setUniformMatrix4f("projection", projection);
+	if(player.isAlive())
+		texProgram.setUniform4f("color", 1.0f, 1.0f, 1.0f, 1.0f);
+	else
+		texProgram.setUniform4f("color", 0.4f, 0.4f, 0.4f, 1.0f);
+	player.render();
+
+	// 7. Render remaining lives HUD anchored to the top-left of the camera viewport
+	glm::vec2 camTopLeft = cameraCenter - cameraViewSize * 0.5f;
+	for(int i = 0; i < 3; i++)
+	{
+		glm::vec2 iconPos = camTopLeft + glm::vec2(4.0f + i * (tSize * 0.55f), 4.0f);
+		glm::vec2 iconSize(tSize * 0.40f, tSize * 0.40f);
+		if(i < player.getLives())
+			renderQuad(iconPos, iconSize, glm::vec4(0.95f, 0.15f, 0.2f, 1.0f));
+		else
+			renderQuad(iconPos, iconSize, glm::vec4(0.25f, 0.25f, 0.25f, 0.8f));
+	}
+
+	// 8. Debug Draw: Colisiones (toggle with 'H')
+	if(showHitboxes)
+		renderDebugDraw();
+}
+
+bool Scene::isGameOver() const
+{
+	return gameOver;
+}
+
+bool Scene::isWin() const
+{
+	return win;
+}
+
+void Scene::initShaders()
+{
+	Shader vShader, fShader;
+
+	// Texture shader for tilemap
+	vShader.initFromFile(VERTEX_SHADER, "shaders/texture.vert");
+	if(!vShader.isCompiled())
+	{
+		cout << "Vertex Shader Error: " << vShader.log() << endl;
+	}
+	fShader.initFromFile(FRAGMENT_SHADER, "shaders/texture.frag");
+	if(!fShader.isCompiled())
+	{
+		cout << "Fragment Shader Error: " << fShader.log() << endl;
+	}
+	texProgram.init();
+	texProgram.addShader(vShader);
+	texProgram.addShader(fShader);
+	texProgram.link();
+	if(!texProgram.isLinked())
+	{
+		cout << "Shader Linking Error: " << texProgram.log() << endl;
+	}
+	texProgram.bindFragmentOutput("outColor");
+	vShader.free();
+	fShader.free();
+
+	// Simple shader for colored entity quads
+	vShader.initFromFile(VERTEX_SHADER, "shaders/simple.vert");
+	if(!vShader.isCompiled())
+	{
+		cout << "Simple Vertex Shader Error: " << vShader.log() << endl;
+	}
+	fShader.initFromFile(FRAGMENT_SHADER, "shaders/simple.frag");
+	if(!fShader.isCompiled())
+	{
+		cout << "Simple Fragment Shader Error: " << fShader.log() << endl;
+	}
+	simpleProgram.init();
+	simpleProgram.addShader(vShader);
+	simpleProgram.addShader(fShader);
+	simpleProgram.link();
+	if(!simpleProgram.isLinked())
+	{
+		cout << "Simple Shader Linking Error: " << simpleProgram.log() << endl;
+	}
+	simpleProgram.bindFragmentOutput("outColor");
+	vShader.free();
+	fShader.free();
+}
+
+void Scene::initQuadVAO()
+{
+	float quadVertices[] = {
+		0.0f, 0.0f,
+		1.0f, 0.0f,
+		1.0f, 1.0f,
+		0.0f, 0.0f,
+		1.0f, 1.0f,
+		0.0f, 1.0f
+	};
+
+	glGenVertexArrays(1, &quadVAO);
+	glBindVertexArray(quadVAO);
+	glGenBuffers(1, &quadVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+	quadPosLocation = simpleProgram.bindVertexAttribute("position", 2, 2 * sizeof(float), 0);
+}
+
+void Scene::renderQuad(const glm::vec2 &pos, const glm::vec2 &size, const glm::vec4 &color)
+{
+	simpleProgram.use();
+	simpleProgram.setUniformMatrix4f("projection", projection);
+	simpleProgram.setUniform4f("color", color.r, color.g, color.b, color.a);
+
+	glm::mat4 modelview = glm::translate(glm::mat4(1.0f), glm::vec3(pos.x, pos.y, 0.0f));
+	modelview = glm::scale(modelview, glm::vec3(size.x, size.y, 1.0f));
+	simpleProgram.setUniformMatrix4f("modelview", modelview);
+
+	glBindVertexArray(quadVAO);
+	glEnableVertexAttribArray(quadPosLocation);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+}
+
+void Scene::renderWireQuad(const glm::vec2 &pos, const glm::vec2 &size, const glm::vec4 &color)
+{
+	simpleProgram.use();
+	simpleProgram.setUniformMatrix4f("projection", projection);
+	simpleProgram.setUniform4f("color", color.r, color.g, color.b, color.a);
+
+	glm::mat4 modelview = glm::translate(glm::mat4(1.0f), glm::vec3(pos.x, pos.y, 0.0f));
+	modelview = glm::scale(modelview, glm::vec3(size.x, size.y, 1.0f));
+	simpleProgram.setUniformMatrix4f("modelview", modelview);
+
+	glBindVertexArray(quadVAO);
+	glEnableVertexAttribArray(quadPosLocation);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+}
+
+void Scene::renderDebugDraw()
+{
+	if(map == NULL)
+		return;
+
+	float tSize = float(map->getBlockSize());
+	glm::vec2 minCoords = map->getMinCoords();
+
+	// 1. Dibujar hitboxes de los tiles del mapa:
+	//    - VERDE: muros/suelo sólidos completos
+	//    - AMARILLO: plataformas one-way (atravesables desde abajo)
+	//    - CIAN: enredaderas/lianas trepables
+	for(int j = 0; j < map->getMapHeight(); j++)
+	{
+		for(int i = 0; i < map->getMapWidth(); i++)
+		{
+			glm::vec2 tileWorldPos = minCoords + glm::vec2(i * tSize, j * tSize);
+			if(!map->isWalkable(i, j))
+			{
+				renderWireQuad(tileWorldPos, glm::vec2(tSize, tSize), glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
+			}
+			else if(map->isOneWayPlatform(i, j))
+			{
+				renderWireQuad(tileWorldPos, glm::vec2(tSize, tSize), glm::vec4(1.0f, 0.9f, 0.1f, 1.0f));
+			}
+			else if(map->isClimbable(i, j))
+			{
+				renderWireQuad(tileWorldPos, glm::vec2(tSize, tSize), glm::vec4(0.1f, 0.85f, 1.0f, 1.0f));
+			}
+		}
+	}
+
+	// 2. Dibujar hitbox de cada Enemigo vivo en MAGENTA
+	for(size_t i = 0; i < activeEnemies.size(); i++)
+	{
+		if(activeEnemies[i]->isAlive())
+		{
+			renderWireQuad(activeEnemies[i]->getHitboxPos(), activeEnemies[i]->getHitboxSize(), glm::vec4(1.0f, 0.2f, 0.85f, 1.0f));
+		}
+	}
+
+	// 3. Dibujar hitbox del Player en ROJO
+	renderWireQuad(player.getHitboxPos(), player.getHitboxSize(), glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+}
+
+void Scene::handleBombPlacement()
+{
+	if(player.wantsToPlaceBomb())
+	{
+		glm::ivec2 pTile = player.getTilePosition(map);
+
+		bool bombAlreadyThere = false;
+		for(const auto &b : bombs)
+		{
+			if(b.isActive() && b.getTilePosition() == pTile && !b.hasExploded())
+			{
+				bombAlreadyThere = true;
+				break;
+			}
+		}
+
+		if(!bombAlreadyThere)
+		{
+			Bomb *b = bombs.acquire();
+			if(b != NULL)
+			{
+				b->init(pTile, map->tileToWorld(pTile), player.getBombRange());
+				player.bombPlaced();
+			}
+		}
+	}
+}
+
+void Scene::handleExplosions()
+{
+	// 1. Spawn a new progressive Explosion when a Bomb finishes its 3-second countdown
+	for(size_t i = 0; i < bombs.capacity(); i++)
+	{
+		if(bombs[i].isActive() && bombs[i].hasExploded() && !bombs[i].isProcessed())
+		{
+			glm::ivec2 bombTile = bombs[i].getTilePosition();
+			int bombRange = bombs[i].getRange();
+
+			bombs[i].markProcessed();
+			player.bombExploded();
+
+			Explosion *exp = explosions.acquire();
+			if(exp != NULL)
+			{
+				exp->init(bombTile, bombRange, map);
+			}
+		}
+	}
+
+	// 2. Process all active Explosions as their flames expand step-by-step (0.1s per tile)
+	static vector<glm::ivec2> newlyDestroyed;
+	for(auto &exp : explosions)
+	{
+		if(!exp.isActive() || exp.isFinished())
+			continue;
+
+		// Destroy destructible grass blocks newly reached by the expanding flame on this step
+		exp.popNewlyDestroyedBlocks(newlyDestroyed);
+		for(const auto &blockPos : newlyDestroyed)
+		{
+			map->destroyTile(blockPos.x, blockPos.y);
+			if((rand() % 100) < 40) // 40% chance of power-up
+			{
+				spawnPowerUp(blockPos);
+			}
+		}
+
+		// Toggle vine retraction/expansion once when the expanding flame reaches a vine head block
+		if(!exp.hasToggledVine())
+		{
+			for(const auto &t : exp.getAffectedTiles())
+			{
+				if(map->toggleVineAtHead(t.x, t.y))
+				{
+					exp.markVineToggled();
+					break;
+				}
+			}
+		}
+
+		// Chain reaction: any bomb caught in currently visible flame tiles explodes immediately
+		for(size_t j = 0; j < bombs.capacity(); j++)
+		{
+			if(bombs[j].isActive() && !bombs[j].hasExploded())
+			{
+				for(const auto &t : exp.getAffectedTiles())
+				{
+					if(bombs[j].getTilePosition() == t)
+					{
+						bombs[j].explode();
+						break;
+					}
+				}
+			}
+		}
+
+		// Check player in currently visible flame tiles (loses 1 life, 2s invulnerability, and knockback)
+		glm::ivec2 pTile = player.getTilePosition(map);
+		for(const auto &t : exp.getAffectedTiles())
+		{
+			if(t == pTile)
+			{
+				if(!player.isInvulnerable())
+				{
+					float tSize = float(map->getBlockSize());
+					glm::vec2 pCenter = player.getHitboxPos() + player.getHitboxSize() * 0.5f;
+					glm::vec2 bCenter = map->tileToWorld(exp.getCenterTile()) + glm::vec2(tSize * 0.5f);
+					float dirX = (pCenter.x >= bCenter.x) ? 1.0f : -1.0f;
+					player.takeDamage();
+					player.applyKnockback(glm::vec2(dirX * tSize * 0.008f, -tSize * 0.011f));
+				}
+				break;
+			}
+		}
+
+		// Check enemies in currently visible flame tiles
+		for(size_t k = 0; k < activeEnemies.size(); k++)
+		{
+			if(activeEnemies[k]->isAlive())
+			{
+				glm::ivec2 eTile = activeEnemies[k]->getTilePosition(map);
+				for(const auto &t : exp.getAffectedTiles())
+				{
+					if(t == eTile)
+					{
+						activeEnemies[k]->kill();
+						break;
+					}
+				}
+			}
+		}
+
+		// Destroy uncollected power-ups caught in currently visible flame tiles
+		for(auto &pw : powerups)
+		{
+			if(pw.isActive() && !pw.isCollected())
+			{
+				for(const auto &t : exp.getAffectedTiles())
+				{
+					if(t == pw.getTilePosition())
+					{
+						pw.collect(); // burned
+						break;
+					}
+				}
+			}
+		}
+	}
+}
+
+void Scene::handlePowerUpCollection()
+{
+	if(!player.isAlive())
+		return;
+
+	glm::ivec2 pTile = player.getTilePosition(map);
+	for(auto &pw : powerups)
+	{
+		if(pw.isActive() && !pw.isCollected() && pw.getTilePosition() == pTile)
+		{
+			player.addPowerUp(pw.getType());
+			pw.collect();
+		}
+	}
+}
+
+void Scene::checkEntityCollisions()
+{
+	if(!player.isAlive())
+		return;
+
+	float tSize = float(map->getBlockSize());
+	glm::vec2 colOffset((tSize - player.getHitboxSize().x) * 0.5f,
+	                    (tSize - player.getHitboxSize().y) * 0.5f);
+
+	// 1. Enemy-vs-Enemy solid collisions using each enemy's custom hitbox
+	for(size_t i = 0; i < activeEnemies.size(); i++)
+	{
+		if(!activeEnemies[i]->isAlive())
+			continue;
+		for(size_t j = i + 1; j < activeEnemies.size(); j++)
+		{
+			if(!activeEnemies[j]->isAlive())
+				continue;
+
+			glm::vec2 e1Pos = activeEnemies[i]->getHitboxPos();
+			glm::vec2 e1Size = activeEnemies[i]->getHitboxSize();
+			glm::vec2 e2Pos = activeEnemies[j]->getHitboxPos();
+			glm::vec2 e2Size = activeEnemies[j]->getHitboxSize();
+
+			float ox = std::min(e1Pos.x + e1Size.x, e2Pos.x + e2Size.x) - std::max(e1Pos.x, e2Pos.x);
+			float oy = std::min(e1Pos.y + e1Size.y, e2Pos.y + e2Size.y) - std::max(e1Pos.y, e2Pos.y);
+			if(ox > 0.0f && oy > 0.0f)
+			{
+				float push = ox * 0.5f;
+				if(e1Pos.x < e2Pos.x)
+				{
+					activeEnemies[i]->setPosition(activeEnemies[i]->getPosition() - glm::vec2(push, 0.0f));
+					activeEnemies[j]->setPosition(activeEnemies[j]->getPosition() + glm::vec2(push, 0.0f));
+				}
+				else
+				{
+					activeEnemies[i]->setPosition(activeEnemies[i]->getPosition() + glm::vec2(push, 0.0f));
+					activeEnemies[j]->setPosition(activeEnemies[j]->getPosition() - glm::vec2(push, 0.0f));
+				}
+				activeEnemies[i]->reverseDirection();
+				activeEnemies[j]->reverseDirection();
+			}
+		}
+	}
+
+	// 2. Player-vs-Enemy solid collision, knockback & life loss using each enemy's custom hitbox
+	glm::vec2 pPos = player.getHitboxPos();
+	glm::vec2 pSize = player.getHitboxSize();
+
+	for(size_t i = 0; i < activeEnemies.size(); i++)
+	{
+		Enemy *enemy = activeEnemies[i];
+		if(!enemy->isAlive())
+			continue;
+
+		glm::vec2 ePos = enemy->getHitboxPos();
+		glm::vec2 eSize = enemy->getHitboxSize();
+
+		float overlapX = std::min(pPos.x + pSize.x, ePos.x + eSize.x) - std::max(pPos.x, ePos.x);
+		float overlapY = std::min(pPos.y + pSize.y, ePos.y + eSize.y) - std::max(pPos.y, ePos.y);
+
+		if(overlapX > 0.0f && overlapY > 0.0f)
+		{
+			glm::vec2 pCenter = pPos + pSize * 0.5f;
+			glm::vec2 eCenter = ePos + eSize * 0.5f;
+			float signX = (pCenter.x < eCenter.x) ? -1.0f : 1.0f;
+			float signY = (pCenter.y < eCenter.y) ? -1.0f : 1.0f;
+
+			glm::vec2 newPlayerPos = player.getPosition();
+			if(overlapX < overlapY)
+			{
+				newPlayerPos.x += signX * overlapX;
+				if(signX < 0.0f && map->collisionMoveLeft(newPlayerPos + colOffset, pSize))
+					newPlayerPos.x = player.getPosition().x;
+				else if(signX > 0.0f && map->collisionMoveRight(newPlayerPos + colOffset, pSize))
+					newPlayerPos.x = player.getPosition().x;
+				enemy->reverseDirection();
+			}
+			else
+			{
+				newPlayerPos.y += signY * overlapY;
+				if(signY < 0.0f && map->collisionMoveUp(newPlayerPos + colOffset, pSize))
+					newPlayerPos.y = player.getPosition().y;
+			}
+			player.setPosition(newPlayerPos);
+
+			if(!player.isInvulnerable())
+			{
+				player.takeDamage();
+				player.applyKnockback(glm::vec2(signX * tSize * 0.006f, -tSize * 0.009f));
+			}
+
+			pPos = player.getHitboxPos();
+		}
+	}
+}
+
+void Scene::spawnPowerUp(const glm::ivec2 &tilePos)
+{
+	PowerUp *pw = powerups.acquire();
+	if(pw != NULL)
+	{
+		int roll = rand() % 3;
+		PowerUpType type = PowerUpType(roll);
+		pw->init(tilePos, map->tileToWorld(tilePos), type);
+	}
+}
+
+void Scene::cleanupEntities()
+{
+	for(auto &exp : explosions)
+	{
+		if(exp.isActive() && exp.isFinished())
+			exp.deactivate();
+	}
+
+	for(auto &b : bombs)
+	{
+		if(b.isActive() && b.isProcessed())
+			b.deactivate();
+	}
+
+	for(auto &pw : powerups)
+	{
+		if(pw.isActive() && pw.isCollected())
+			pw.deactivate();
+	}
+
+	for(size_t i = 0; i < activeEnemies.size(); i++)
+	{
+		if(!activeEnemies[i]->isActive())
+			activeEnemies[i]->deactivate();
+	}
+}

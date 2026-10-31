@@ -8,6 +8,9 @@ using namespace std;
 
 Texture::Texture()
 {
+	widthTex = 0;
+	heightTex = 0;
+	texId = 0;
 	wrapS = GL_REPEAT;
 	wrapT = GL_REPEAT;
 	minFilter = GL_LINEAR_MIPMAP_LINEAR;
@@ -16,7 +19,8 @@ Texture::Texture()
 
 Texture::~Texture()
 {
-	glDeleteTextures(1, &texId);
+	if(texId != 0)
+		glDeleteTextures(1, &texId);
 }
 
 
@@ -35,7 +39,8 @@ bool Texture::loadFromFile(const string &filename, PixelFormat format)
 	}
 	if(image == NULL)
 		return false;
-	glGenTextures(1, &texId);
+	if(texId == 0)
+		glGenTextures(1, &texId);
 	glBindTexture(GL_TEXTURE_2D, texId);
 	switch(format)
 	{
@@ -46,6 +51,8 @@ bool Texture::loadFromFile(const string &filename, PixelFormat format)
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, widthTex, heightTex, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
 		break;
 	}
+	// Free the uncompressed CPU pixel buffer allocated by SOIL now that it is on GPU VRAM
+	SOIL_free_image_data(image);
 	glGenerateMipmap(GL_TEXTURE_2D);
 	
 	return true;
@@ -53,7 +60,8 @@ bool Texture::loadFromFile(const string &filename, PixelFormat format)
 
 void Texture::loadFromGlyphBuffer(unsigned char *buffer, int width, int height)
 {
-	glGenTextures(1, &texId);
+	if(texId == 0)
+		glGenTextures(1, &texId);
 	glBindTexture(GL_TEXTURE_2D, texId);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, buffer);
@@ -63,7 +71,8 @@ void Texture::loadFromGlyphBuffer(unsigned char *buffer, int width, int height)
 
 void Texture::createEmptyTexture(int width, int height)
 {
-	glGenTextures(1, &texId);
+	if(texId == 0)
+		glGenTextures(1, &texId);
 	glBindTexture(GL_TEXTURE_2D, texId);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, 0);
@@ -115,5 +124,3 @@ void Texture::use() const
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter);
 }
-
-

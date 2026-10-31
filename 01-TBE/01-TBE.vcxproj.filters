@@ -1,96 +1,112 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Archivos de código fuente">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    <Filter Include="core">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A201}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Archivos de encabezado">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    <Filter Include="graphics">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A202}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Archivos de recursos">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    <Filter Include="world">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A203}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="entities">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A204}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="entities\enemies">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A205}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Bomb.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="core\Game.cpp">
+      <Filter>core</Filter>
     </ClCompile>
-    <ClCompile Include="Enemy.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="graphics\Shader.cpp">
+      <Filter>graphics</Filter>
     </ClCompile>
-    <ClCompile Include="Explosion.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="graphics\ShaderProgram.cpp">
+      <Filter>graphics</Filter>
     </ClCompile>
-    <ClCompile Include="Game.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="graphics\Sprite.cpp">
+      <Filter>graphics</Filter>
     </ClCompile>
-    <ClCompile Include="main.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="graphics\Texture.cpp">
+      <Filter>graphics</Filter>
     </ClCompile>
-    <ClCompile Include="Player.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="world\Scene.cpp">
+      <Filter>world</Filter>
     </ClCompile>
-    <ClCompile Include="PowerUp.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="world\TileMap.cpp">
+      <Filter>world</Filter>
     </ClCompile>
-    <ClCompile Include="Scene.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="entities\Bomb.cpp">
+      <Filter>entities</Filter>
     </ClCompile>
-    <ClCompile Include="Shader.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="entities\Explosion.cpp">
+      <Filter>entities</Filter>
     </ClCompile>
-    <ClCompile Include="ShaderProgram.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="entities\Player.cpp">
+      <Filter>entities</Filter>
     </ClCompile>
-    <ClCompile Include="Sprite.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="entities\PowerUp.cpp">
+      <Filter>entities</Filter>
     </ClCompile>
-    <ClCompile Include="Texture.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="entities\enemies\Enemy.cpp">
+      <Filter>entities\enemies</Filter>
     </ClCompile>
-    <ClCompile Include="TileMap.cpp">
-      <Filter>Archivos de código fuente</Filter>
+    <ClCompile Include="entities\enemies\PinkEnemy.cpp">
+      <Filter>entities\enemies</Filter>
+    </ClCompile>
+    <ClCompile Include="entities\enemies\KirbyEnemy.cpp">
+      <Filter>entities\enemies</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Bomb.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="core\Game.h">
+      <Filter>core</Filter>
     </ClInclude>
-    <ClInclude Include="Enemy.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="core\ObjectPool.h">
+      <Filter>core</Filter>
     </ClInclude>
-    <ClInclude Include="Explosion.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="graphics\Shader.h">
+      <Filter>graphics</Filter>
     </ClInclude>
-    <ClInclude Include="Game.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="graphics\ShaderProgram.h">
+      <Filter>graphics</Filter>
     </ClInclude>
-    <ClInclude Include="Player.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="graphics\Sprite.h">
+      <Filter>graphics</Filter>
     </ClInclude>
-    <ClInclude Include="PowerUp.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="graphics\Texture.h">
+      <Filter>graphics</Filter>
     </ClInclude>
-    <ClInclude Include="Scene.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="world\Scene.h">
+      <Filter>world</Filter>
     </ClInclude>
-    <ClInclude Include="Shader.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="world\TileMap.h">
+      <Filter>world</Filter>
     </ClInclude>
-    <ClInclude Include="ShaderProgram.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="entities\Bomb.h">
+      <Filter>entities</Filter>
     </ClInclude>
-    <ClInclude Include="Sprite.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="entities\Explosion.h">
+      <Filter>entities</Filter>
     </ClInclude>
-    <ClInclude Include="Texture.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="entities\Player.h">
+      <Filter>entities</Filter>
     </ClInclude>
-    <ClInclude Include="TileMap.h">
-      <Filter>Archivos de encabezado</Filter>
+    <ClInclude Include="entities\PowerUp.h">
+      <Filter>entities</Filter>
+    </ClInclude>
+    <ClInclude Include="entities\enemies\Enemy.h">
+      <Filter>entities\enemies</Filter>
+    </ClInclude>
+    <ClInclude Include="entities\enemies\PinkEnemy.h">
+      <Filter>entities\enemies</Filter>
+    </ClInclude>
+    <ClInclude Include="entities\enemies\KirbyEnemy.h">
+      <Filter>entities\enemies</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

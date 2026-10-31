@@ -24,6 +24,8 @@ public:
 	glm::ivec2 getTilePosition() const;
 	glm::vec2 getSize() const;
 	PowerUpType getType() const;
+	bool isActive() const;
+	void deactivate();
 	bool isCollected() const;
 	void collect();
 
@@ -31,10 +33,10 @@ private:
 	glm::vec2 pos;
 	glm::ivec2 tilePos_;
 	PowerUpType type_;
+	bool active;
 	bool collected;
 
 };
 
 
 #endif // _POWERUP_INCLUDE
-

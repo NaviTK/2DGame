@@ -6,6 +6,7 @@ PowerUp::PowerUp()
 	pos = glm::vec2(0.0f);
 	tilePos_ = glm::ivec2(0);
 	type_ = EXTRA_BOMB;
+	active = false;
 	collected = false;
 }
 
@@ -14,6 +15,7 @@ void PowerUp::init(const glm::ivec2 &tilePos, const glm::vec2 &worldPos, PowerUp
 	tilePos_ = tilePos;
 	pos = worldPos;
 	type_ = type;
+	active = true;
 	collected = false;
 }
 
@@ -37,6 +39,16 @@ PowerUpType PowerUp::getType() const
 	return type_;
 }
 
+bool PowerUp::isActive() const
+{
+	return active;
+}
+
+void PowerUp::deactivate()
+{
+	active = false;
+}
+
 bool PowerUp::isCollected() const
 {
 	return collected;
@@ -45,5 +57,5 @@ bool PowerUp::isCollected() const
 void PowerUp::collect()
 {
 	collected = true;
+	active = false;
 }
-

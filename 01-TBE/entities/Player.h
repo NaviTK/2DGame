@@ -12,7 +12,8 @@ class TileMap;
 
 
 // The Player class handles user input, platformer physics (gravity, jump,
-// horizontal velocity with tile collision), bomb placement requests, and power-up effects.
+// one-way grass platforms, vine climbing, horizontal velocity with tile collision),
+// lives & invulnerability blinking, bomb placement requests, and power-up effects.
 // Dynamically scales to any tile size (16, 32, etc.)
 
 
@@ -29,6 +30,7 @@ public:
 		STAND_DOWN, STAND_UP, STAND_LEFT, STAND_RIGHT,
 		MOVE_DOWN, MOVE_UP, MOVE_LEFT, MOVE_RIGHT,
 		JUMP_LEFT, JUMP_RIGHT, FALL_LEFT, FALL_RIGHT,
+		CLIMB_IDLE, CLIMB_MOVE,
 		NUM_ANIMS
 	};
 
@@ -40,10 +42,18 @@ public:
 	void update(int deltaTime, TileMap *map);
 
 	glm::vec2 getPosition() const;
+	void setPosition(const glm::vec2 &newPos);
+	glm::vec2 getVelocity() const;
+	void setVelocity(const glm::vec2 &newVel);
 	glm::vec2 getSize() const;
 	glm::vec2 getHitboxPos() const;
 	glm::vec2 getHitboxSize() const;
 	bool isAlive() const;
+	int getLives() const;
+	bool isInvulnerable() const;
+	bool shouldRenderBlink() const;
+	void takeDamage();
+	void applyKnockback(const glm::vec2 &impulse);
 	void kill();
 
 	// Bomb management
@@ -66,16 +76,22 @@ private:
 	float jumpSpeed, gravity;
 	float tileSize_;
 	int maxBombs, activeBombs, bombRange;
+	int lives;
+	float invulnTimer;      // ms remaining of invulnerability (2000 ms after losing a life)
 	bool alive;
 	bool onGround;
+	bool climbing;
+	float coyoteTimer;      // ms remaining where jump is still allowed after leaving ground
+	float jumpBufferTimer;  // ms remaining for a buffered jump press before landing
 	bool wantsPlaceBomb_;
 	bool prevSpaceState;
 	bool prevJumpState;
 
 	// Rendering / animation
-	void updateAnimation(bool moving, int dirX);
+	void updateAnimation(bool moving, int dirX, int dirY);
 	Texture spritesheet;
 	Sprite *sprite;
+	float spriteTileSize_;
 	PlayerAnim facing; // Last STAND_* direction, used when the player stops
 
 };
