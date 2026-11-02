@@ -32,3 +32,6 @@ x86/
 # Output files
 01-TBE/Debug/
 01-TBE/Release/
+
+# Local third-party libraries
+libs/

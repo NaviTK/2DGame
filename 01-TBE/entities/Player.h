@@ -2,6 +2,7 @@
 #define _PLAYER_INCLUDE
 
 
+#include <vector>
 #include <glm/glm.hpp>
 #include "Sprite.h"
 #include "Texture.h"
@@ -64,8 +65,20 @@ public:
 	int getMaxBombs() const;
 	int getActiveBombs() const;
 
-	// Power-ups: 0 = EXTRA_BOMB, 1 = BOMB_RANGE, 2 = SPEED
+	// Power-ups: 0 = EXTRA_BOMB, 1 = BOMB_RANGE, 2 = SPEED, 3 = EXTRA_LIFE, 4 = FULL_FIRE, 5 = VEST
 	void addPowerUp(int type);
+	int getSpeedUps() const;
+	bool hasVest() const;
+	float getVestTimer() const;
+
+	// Upgrade caps (shared with the save system and HUD)
+	static const int MAX_LIVES = 9;
+	static const int MAX_BOMBS_CAP = 8;
+	static const int MAX_RANGE_CAP = 8;
+	static const int MAX_SPEED_UPS = 4;
+	void applyStats(int newLives, int newMaxBombs, int newBombRange, int newSpeedUps);
+	void syncInputLatch();
+	void setBombPlatforms(const std::vector<glm::vec2> &platforms);
 
 	glm::ivec2 getTilePosition(TileMap *map) const;
 
@@ -75,9 +88,10 @@ private:
 	float speed;
 	float jumpSpeed, gravity;
 	float tileSize_;
-	int maxBombs, activeBombs, bombRange;
+	int maxBombs, activeBombs, bombRange, speedUps;
 	int lives;
 	float invulnTimer;      // ms remaining of invulnerability (2000 ms after losing a life)
+	float vestTimer;        // ms remaining of the Vest power-up invincibility
 	bool alive;
 	bool onGround;
 	bool climbing;
@@ -86,6 +100,7 @@ private:
 	bool wantsPlaceBomb_;
 	bool prevSpaceState;
 	bool prevJumpState;
+	std::vector<glm::vec2> bombPlatforms_;
 
 	// Rendering / animation
 	void updateAnimation(bool moving, int dirX, int dirY);
