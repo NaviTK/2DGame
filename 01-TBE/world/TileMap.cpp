@@ -15,7 +15,7 @@ using namespace std;
 static string toUpperStr(string s)
 {
 	for(size_t i = 0; i < s.size(); i++)
-		s[i] = char(std::toupper(unsigned char(s[i])));
+		s[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(s[i])));
 	return s;
 }
 
