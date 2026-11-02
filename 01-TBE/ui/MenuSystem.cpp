@@ -1521,31 +1521,82 @@ void MenuSystem::renderHUD()
 	ui_.rect(glm::vec2(0.0f, 0.0f), glm::vec2(320.0f, 18.0f), glm::vec4(0.04f, 0.07f, 0.16f, 0.86f));
 	ui_.rect(glm::vec2(0.0f, 18.0f), glm::vec2(320.0f, 1.0f), glm::vec4(1.0f, 0.82f, 0.25f, 0.65f));
 
-	renderStatsRow(glm::vec2(5.0f, 3.0f), p.getLives(), p.getMaxBombs(), p.getBombRange(), p.getSpeedUps());
+	// Separate pixel-art red hearts (one icon per remaining life)
+	int lives = std::max(0, p.getLives());
+	float heartStartX = 5.0f;
+	float heartStep = (lives > 5) ? float(UIRenderer::HEART_W + 1) : float(UIRenderer::HEART_W + 2);
+	for(int i = 0; i < lives; i++)
+	{
+		ui_.heart(glm::vec2(heartStartX + float(i) * heartStep, 4.0f));
+	}
+
+	float heartsEnd = (lives > 0)
+	                  ? (heartStartX + float(lives - 1) * heartStep + float(UIRenderer::HEART_W))
+	                  : heartStartX;
+
+	// Power-up stats (fixed anchor up to 3 hearts so icons stay steady when losing lives)
+	float statStep = (lives > 5) ? 23.0f : 26.0f;
+	float x = std::max(48.0f, heartsEnd + 6.0f);
+	float y = 3.0f;
+
+	glm::ivec2 bSrc = PowerUp::getSheetCoords(EXTRA_BOMB);
+	ui_.sheet(glm::vec2(x, y), glm::vec2(12.0f, 12.0f), bSrc.x, bSrc.y, 16, 16);
+	ui_.text(intToStr(p.getMaxBombs()), glm::vec2(x + 14.0f, y + 2.0f), 1.0f, COL_WHITE);
+	x += statStep;
+
+	glm::ivec2 rSrc = PowerUp::getSheetCoords(BOMB_RANGE);
+	ui_.sheet(glm::vec2(x, y), glm::vec2(12.0f, 12.0f), rSrc.x, rSrc.y, 16, 16);
+	ui_.text(intToStr(p.getBombRange()), glm::vec2(x + 14.0f, y + 2.0f), 1.0f, COL_WHITE);
+	x += statStep;
+
+	glm::ivec2 sSrc = PowerUp::getSheetCoords(SPEED_UP);
+	ui_.sheet(glm::vec2(x, y), glm::vec2(12.0f, 12.0f), sSrc.x, sSrc.y, 16, 16);
+	ui_.text(intToStr(p.getSpeedUps()), glm::vec2(x + 14.0f, y + 2.0f), 1.0f, COL_WHITE);
+	x += 23.0f;
 
 	// Active Vest shield timer pill
 	if(p.hasVest())
 	{
 		int secs = int(std::ceil(p.getVestTimer() / 1000.0f));
 		glm::ivec2 vSrc = PowerUp::getSheetCoords(VEST);
-		ui_.sheet(glm::vec2(126.0f, 2.0f), glm::vec2(13.0f, 13.0f), vSrc.x, vSrc.y, 16, 16);
-		ui_.text(intToStr(secs) + "S", glm::vec2(141.0f, 5.0f), 1.0f, COL_GOLD);
+		ui_.sheet(glm::vec2(x, 2.0f), glm::vec2(13.0f, 13.0f), vSrc.x, vSrc.y, 16, 16);
+		std::string secStr = intToStr(secs) + "S";
+		ui_.text(secStr, glm::vec2(x + 15.0f, 5.0f), 1.0f, COL_GOLD);
+		x += 15.0f + ui_.textWidth(secStr, 1.0f) + 5.0f;
 	}
+
+	// Timer + clickable [II] Pause button
+	std::string timeStr = formatTime(scene_->getElapsedTime());
+	float timeRightX = 292.0f;
+	float timeLeftX = timeRightX - ui_.textWidth(timeStr, 1.0f);
+	ui_.textRight(timeStr, timeRightX, 5.0f, 1.0f, COL_WHITE);
 
 	// Enemies left / Exit door alert
 	int rem = scene_->getEnemiesRemaining();
+	float availRight = timeLeftX - 5.0f;
 	if(rem == 0 && scene_->levelHasExitDoor())
 	{
 		if((int(time_ / 260.0f) % 2) == 0)
-			ui_.textCentered(UTF8_INV_EX "VE A LA PUERTA!", 196.0f, 5.0f, 1.0f, COL_GOLD);
+		{
+			std::string doorMsg = UTF8_INV_EX "VE A LA PUERTA!";
+			if(availRight - x < ui_.textWidth(doorMsg, 1.0f))
+				doorMsg = UTF8_INV_EX "PUERTA!";
+			if(availRight - x < ui_.textWidth(doorMsg, 1.0f))
+				doorMsg = "META";
+			float cx = std::max(x + ui_.textWidth(doorMsg, 1.0f) * 0.5f,
+			                    std::min(200.0f, (x + availRight) * 0.5f));
+			ui_.textCentered(doorMsg, cx, 5.0f, 1.0f, COL_GOLD);
+		}
 	}
 	else
 	{
-		ui_.text("ENEM:" + intToStr(rem), glm::vec2(164.0f, 5.0f), 1.0f, COL_SKY);
+		std::string enemStr = "ENEM:" + intToStr(rem);
+		if(availRight - x < ui_.textWidth(enemStr, 1.0f))
+			enemStr = "E:" + intToStr(rem);
+		float enemW = ui_.textWidth(enemStr, 1.0f);
+		float enemX = std::min(std::max(176.0f, x), availRight - enemW);
+		ui_.text(enemStr, glm::vec2(enemX, 5.0f), 1.0f, COL_SKY);
 	}
-
-	// Timer & Score + clickable [II] Pause button
-	ui_.textRight(formatTime(scene_->getElapsedTime()), 292.0f, 5.0f, 1.0f, COL_WHITE);
 
 	glm::vec2 pauseBtn(298.0f, 2.0f), pauseSz(19.0f, 14.0f);
 	bool pHover = (state_ == STATE_PLAYING) && mouseInRect(pauseBtn, pauseSz);

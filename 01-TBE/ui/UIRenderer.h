@@ -19,6 +19,8 @@ class UIRenderer
 public:
 	static const int VIRTUAL_W = 320;
 	static const int VIRTUAL_H = 240;
+	static const int HEART_W   = 11;
+	static const int HEART_H   = 10;
 
 	UIRenderer();
 	~UIRenderer();
@@ -45,6 +47,8 @@ public:
 	// Sub-rectangle of images/caracters.png. Negative srcW mirrors horizontally.
 	void sheet(const glm::vec2 &pos, const glm::vec2 &size, int srcX, int srcY, int srcW, int srcH,
 	           const glm::vec4 &color = glm::vec4(1.0f));
+	// Crisp 11x10 pixel-art red heart icon for the HUD
+	void heart(const glm::vec2 &pos, float scale = 1.0f);
 
 	// Text (8x8 pixel font, scale 1 = 8 virtual px tall)
 	void text(const std::string &str, const glm::vec2 &pos, float scale, const glm::vec4 &color, bool shadow = true);
@@ -53,6 +57,8 @@ public:
 	float textWidth(const std::string &str, float scale) const;
 
 private:
+	void buildHeartTexture();
+
 	ShaderProgram *texProgram_;
 	ShaderProgram *simpleProgram_;
 	PixelFont font_;
@@ -61,6 +67,7 @@ private:
 	GLint colorPosLoc_;
 	GLuint texVAO_, texVBO_;
 	GLint texPosLoc_, texCoordLoc_;
+	GLuint heartTex_;
 	bool initialized_;
 
 };

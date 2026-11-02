@@ -10,6 +10,7 @@ UIRenderer::UIRenderer()
 	simpleProgram_ = NULL;
 	colorVAO_ = colorVBO_ = 0;
 	texVAO_ = texVBO_ = 0;
+	heartTex_ = 0;
 	colorPosLoc_ = texPosLoc_ = texCoordLoc_ = -1;
 	initialized_ = false;
 	projection_ = glm::mat4(1.0f);
@@ -21,6 +22,7 @@ UIRenderer::~UIRenderer()
 	if(colorVBO_ != 0) glDeleteBuffers(1, &colorVBO_);
 	if(texVAO_ != 0) glDeleteVertexArrays(1, &texVAO_);
 	if(texVBO_ != 0) glDeleteBuffers(1, &texVBO_);
+	if(heartTex_ != 0) glDeleteTextures(1, &heartTex_);
 }
 
 void UIRenderer::init(ShaderProgram &texProgram, ShaderProgram &simpleProgram)
@@ -61,6 +63,7 @@ void UIRenderer::init(ShaderProgram &texProgram, ShaderProgram &simpleProgram)
 	texCoordLoc_ = texProgram.bindVertexAttribute("texCoord", 2, 4 * sizeof(float), (void *)(2 * sizeof(float)));
 
 	font_.init(texProgram);
+	buildHeartTexture();
 
 	projection_ = glm::ortho(0.0f, float(VIRTUAL_W), float(VIRTUAL_H), 0.0f);
 	initialized_ = true;
@@ -155,6 +158,75 @@ void UIRenderer::sheet(const glm::vec2 &pos, const glm::vec2 &size, int srcX, in
 	else
 		Bomb::drawSheetRect(*texProgram_, pos, size, srcX, srcY, srcW, srcH);
 	texProgram_->setUniform4f("color", 1.0f, 1.0f, 1.0f, 1.0f);
+}
+
+void UIRenderer::buildHeartTexture()
+{
+	static const char *kHeartRows[HEART_H] = {
+		".###...###.",
+		"#HWR#.#RRD#",
+		"#WRRR#RRRD#",
+		"#RRRRRRRRD#",
+		"#RRRRRRRRD#",
+		".#RRRRRRD#.",
+		"..#RRRRD#..",
+		"...#RRD#...",
+		"....#D#....",
+		".....#....."
+	};
+
+	unsigned char rgba[HEART_W * HEART_H * 4];
+	for(int ry = 0; ry < HEART_H; ry++)
+	{
+		for(int rx = 0; rx < HEART_W; rx++)
+		{
+			int idx = (ry * HEART_W + rx) * 4;
+			unsigned char r = 0, g = 0, b = 0, a = 0;
+			switch(kHeartRows[ry][rx])
+			{
+			case '#': r = 10;  g = 8;   b = 20;  a = 255; break; // Dark pixel-art outline
+			case 'R': r = 238; g = 36;  b = 54;  a = 255; break; // Vibrant arcade red
+			case 'H': r = 255; g = 112; b = 128; a = 255; break; // Soft coral highlight
+			case 'W': r = 255; g = 245; b = 248; a = 255; break; // Specular white shine
+			case 'D': r = 158; g = 16;  b = 38;  a = 255; break; // Crimson shadow
+			default:  break;
+			}
+			rgba[idx + 0] = r;
+			rgba[idx + 1] = g;
+			rgba[idx + 2] = b;
+			rgba[idx + 3] = a;
+		}
+	}
+
+	if(heartTex_ == 0)
+		glGenTextures(1, &heartTex_);
+	glBindTexture(GL_TEXTURE_2D, heartTex_);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, HEART_W, HEART_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+}
+
+void UIRenderer::heart(const glm::vec2 &pos, float scale)
+{
+	if(heartTex_ == 0)
+		return;
+
+	glm::vec2 snapped = glm::floor(pos);
+	texProgram_->use();
+	texProgram_->setUniformMatrix4f("projection", projection_);
+	texProgram_->setUniform4f("color", 1.0f, 1.0f, 1.0f, 1.0f);
+	glm::mat4 mv = glm::translate(glm::mat4(1.0f), glm::vec3(snapped.x, snapped.y, 0.0f));
+	mv = glm::scale(mv, glm::vec3(float(HEART_W) * scale, float(HEART_H) * scale, 1.0f));
+	texProgram_->setUniformMatrix4f("modelview", mv);
+	glEnable(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, heartTex_);
+	glBindVertexArray(texVAO_);
+	glEnableVertexAttribArray(texPosLoc_);
+	glEnableVertexAttribArray(texCoordLoc_);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glDisable(GL_TEXTURE_2D);
 }
 
 void UIRenderer::text(const std::string &str, const glm::vec2 &pos, float scale, const glm::vec4 &color, bool shadow)

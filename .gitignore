@@ -35,3 +35,6 @@ x86/
 
 # Local third-party libraries
 libs/
+
+# User-specific files
+saves/
