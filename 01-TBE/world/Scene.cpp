@@ -93,7 +93,7 @@ void Scene::loadLevel(int levelIndex, bool preservePlayerStats)
 	}
 
 	const WorldDef *wDef = SaveSystem::instance().getWorldById(levelIndex);
-	string levelFile = (wDef != NULL) ? wDef->levelFile : ((levelIndex == 2) ? "levels/level02.txt" : "levels/level01.txt");
+	string levelFile = (wDef != NULL) ? wDef->levelFile : ((levelIndex == 3) ? "levels/level03.txt" : ((levelIndex == 2) ? "levels/level02.txt" : "levels/level01.txt"));
 	map = TileMap::createTileMap(levelFile, glm::vec2(0.0f), texProgram);
 
 	float tSize = float(map->getBlockSize());

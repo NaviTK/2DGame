@@ -136,4 +136,7 @@
       <Filter>entities\enemies</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="levels\level03.txt" />
+  </ItemGroup>
 </Project>

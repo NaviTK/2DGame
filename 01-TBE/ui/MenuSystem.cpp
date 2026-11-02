@@ -699,7 +699,7 @@ void MenuSystem::updatePlaying(int deltaTime)
 		return;
 	}
 
-	// Quick level testing shortcuts ('1', '2', 'R')
+	// Quick level testing shortcuts ('1', '2', '3', 'R')
 	if(Game::instance().justPressed(GLFW_KEY_1))
 	{
 		worldSel_ = 1;
@@ -709,6 +709,12 @@ void MenuSystem::updatePlaying(int deltaTime)
 	if(Game::instance().justPressed(GLFW_KEY_2) && SaveSystem::instance().getWorldCount() >= 2)
 	{
 		worldSel_ = 2;
+		startWorld(false);
+		return;
+	}
+	if(Game::instance().justPressed(GLFW_KEY_3) && SaveSystem::instance().getWorldCount() >= 3)
+	{
+		worldSel_ = 3;
 		startWorld(false);
 		return;
 	}

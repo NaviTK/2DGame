@@ -48,8 +48,21 @@ void SaveSystem::initWorlds()
 	w2.hasKirbyEnemy = true;
 	worlds_.push_back(w2);
 
-	// Para añadir futuros mundos (ej. Mundo 3), basta con hacer push_back de otro WorldDef aquí
-	// apuntando a "levels/level03.txt" y su coordenada en el mapa (320x240).
+	// Mundo 3 -> levels/level03.txt (Crystal cave in the right mountain)
+	WorldDef w3;
+	w3.id = 3;
+	w3.name = "MUNDO 3";
+	w3.themeName = "CUEVA DE CRISTAL";
+	w3.levelFile = "levels/level03.txt";
+	w3.mapNodePos = glm::vec2(250.0f, 100.0f);
+	w3.pathFromPrev.push_back(glm::vec2(202.0f, 152.0f));
+	w3.pathFromPrev.push_back(glm::vec2(220.0f, 152.0f));
+	w3.pathFromPrev.push_back(glm::vec2(242.0f, 136.0f));
+	w3.pathFromPrev.push_back(glm::vec2(244.0f, 112.0f));
+	w3.accentColor = glm::vec4(0.25f, 0.72f, 0.96f, 1.0f);
+	w3.hasPinkEnemy = true;
+	w3.hasKirbyEnemy = true;
+	worlds_.push_back(w3);
 }
 
 const WorldDef *SaveSystem::getWorldById(int worldId) const
@@ -122,6 +135,11 @@ void SaveSystem::loadAllSlots()
 			}
 		}
 
+		for(int w = 1; w < maxWorld; w++)
+		{
+			if(loaded.isWorldCompleted(w) && loaded.highestUnlockedWorld < w + 1)
+				loaded.highestUnlockedWorld = w + 1;
+		}
 		loaded.currentWorld = std::max(1, std::min(loaded.currentWorld, maxWorld));
 		loaded.highestUnlockedWorld = std::max(1, std::min(loaded.highestUnlockedWorld, maxWorld));
 		loaded.lives = std::max(1, std::min(loaded.lives, 9));
