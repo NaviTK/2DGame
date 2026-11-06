@@ -27,7 +27,7 @@ void SaveSystem::initWorlds()
 	w1.name = "NIVELL 1";
 	w1.themeName = "BOSC VERD";
 	w1.levelFile = "levels/level01.txt";
-	w1.mapNodePos = glm::vec2(64.0f, 156.0f);
+	w1.mapNodePos = glm::vec2(92.0f, 154.0f);
 	w1.accentColor = glm::vec4(0.18f, 0.78f, 0.30f, 1.0f);
 	w1.hasPinkEnemy = true;
 	w1.hasKirbyEnemy = true;
@@ -41,8 +41,10 @@ void SaveSystem::initWorlds()
 	w2.name = "NIVELL 2";
 	w2.themeName = "RUINES ROCOSES";
 	w2.levelFile = "levels/level02.txt";
-	w2.mapNodePos = glm::vec2(124.0f, 144.0f);
-	w2.pathFromPrev.push_back(glm::vec2(94.0f, 152.0f));
+	w2.mapNodePos = glm::vec2(198.0f, 132.0f);
+	w2.pathFromPrev.push_back(glm::vec2(124.0f, 154.0f));
+	w2.pathFromPrev.push_back(glm::vec2(124.0f, 116.0f));
+	w2.pathFromPrev.push_back(glm::vec2(196.0f, 116.0f));
 	w2.accentColor = glm::vec4(0.88f, 0.56f, 0.20f, 1.0f);
 	w2.hasPinkEnemy = true;
 	w2.hasKirbyEnemy = true;
@@ -56,8 +58,11 @@ void SaveSystem::initWorlds()
 	w3.name = "NIVELL 3";
 	w3.themeName = "COVA DE CRISTALL";
 	w3.levelFile = "levels/level03.txt";
-	w3.mapNodePos = glm::vec2(178.0f, 122.0f);
-	w3.pathFromPrev.push_back(glm::vec2(150.0f, 134.0f));
+	w3.mapNodePos = glm::vec2(250.0f, 100.0f);
+	w3.pathFromPrev.push_back(glm::vec2(202.0f, 152.0f));
+	w3.pathFromPrev.push_back(glm::vec2(220.0f, 152.0f));
+	w3.pathFromPrev.push_back(glm::vec2(242.0f, 136.0f));
+	w3.pathFromPrev.push_back(glm::vec2(244.0f, 112.0f));
 	w3.accentColor = glm::vec4(0.25f, 0.72f, 0.96f, 1.0f);
 	w3.hasPinkEnemy = true;
 	w3.hasKirbyEnemy = true;
@@ -71,8 +76,8 @@ void SaveSystem::initWorlds()
 	w4.name = "NIVELL 4";
 	w4.themeName = "TEMPLE ANTIC";
 	w4.levelFile = "levels/level04.txt";
-	w4.mapNodePos = glm::vec2(226.0f, 108.0f);
-	w4.pathFromPrev.push_back(glm::vec2(202.0f, 116.0f));
+	w4.mapNodePos = glm::vec2(260.0f, 66.0f);
+	w4.pathFromPrev.push_back(glm::vec2(268.0f, 96.0f));
 	w4.accentColor = glm::vec4(0.82f, 0.42f, 0.92f, 1.0f);
 	w4.hasPinkEnemy = true;
 	w4.hasKirbyEnemy = true;
@@ -86,8 +91,8 @@ void SaveSystem::initWorlds()
 	w5.name = "NIVELL 5";
 	w5.themeName = "FORTALESA DEL BOSS";
 	w5.levelFile = "levels/level05.txt";
-	w5.mapNodePos = glm::vec2(268.0f, 88.0f);
-	w5.pathFromPrev.push_back(glm::vec2(248.0f, 98.0f));
+	w5.mapNodePos = glm::vec2(215.0f, 58.0f);
+	w5.pathFromPrev.push_back(glm::vec2(242.0f, 60.0f));
 	w5.accentColor = glm::vec4(1.0f, 0.28f, 0.32f, 1.0f);
 	w5.hasPinkEnemy = true;
 	w5.hasKirbyEnemy = false;
@@ -176,7 +181,7 @@ void SaveSystem::loadAllSlots()
 		loaded.lives = std::max(1, std::min(loaded.lives, 9));
 		loaded.maxBombs = std::max(1, std::min(loaded.maxBombs, 9));
 		loaded.bombRange = std::max(1, std::min(loaded.bombRange, 9));
-		loaded.speedUps = std::max(0, std::min(loaded.speedUps, 6));
+		loaded.speedUps = std::max(0, std::min(loaded.speedUps, 3));
 
 		slots_[i] = loaded;
 	}

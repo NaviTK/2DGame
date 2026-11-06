@@ -226,12 +226,17 @@ void PixelFont::decodeUtf8ToGlyphs(const std::string &utf8Text, std::vector<int>
 			unsigned char c2 = static_cast<unsigned char>(utf8Text[++i]);
 			switch(c2)
 			{
+			case 0x80: case 0xA0: outGlyphs.push_back(GLYPH_A_ACUTE); break; // À, à
 			case 0x81: case 0xA1: outGlyphs.push_back(GLYPH_A_ACUTE); break; // Á, á
+			case 0x87: case 0xA7: outGlyphs.push_back('C');           break; // Ç, ç
+			case 0x88: case 0xA8: outGlyphs.push_back(GLYPH_E_ACUTE); break; // È, è
 			case 0x89: case 0xA9: outGlyphs.push_back(GLYPH_E_ACUTE); break; // É, é
 			case 0x8D: case 0xAD: outGlyphs.push_back(GLYPH_I_ACUTE); break; // Í, í
+			case 0x8F: case 0xAF: outGlyphs.push_back(GLYPH_I_ACUTE); break; // Ï, ï
+			case 0x91: case 0xB1: outGlyphs.push_back(GLYPH_N_TILDE); break; // Ñ, ñ
+			case 0x92: case 0xB2: outGlyphs.push_back(GLYPH_O_ACUTE); break; // Ò, ò
 			case 0x93: case 0xB3: outGlyphs.push_back(GLYPH_O_ACUTE); break; // Ó, ó
 			case 0x9A: case 0xBA: outGlyphs.push_back(GLYPH_U_ACUTE); break; // Ú, ú
-			case 0x91: case 0xB1: outGlyphs.push_back(GLYPH_N_TILDE); break; // Ñ, ñ
 			case 0x9C: case 0xBC: outGlyphs.push_back(GLYPH_U_UML);   break; // Ü, ü
 			default:              outGlyphs.push_back('?');           break;
 			}

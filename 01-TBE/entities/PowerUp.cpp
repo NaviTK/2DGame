@@ -73,13 +73,21 @@ glm::ivec2 PowerUp::getSheetCoords(PowerUpType type)
 	}
 }
 
-PowerUpType PowerUp::rollRandomType()
+PowerUpType PowerUp::rollRandomType(bool allowSpeedUp)
 {
 	// Drop table restricted strictly to the 4 required power-ups:
 	// 1. Bomb Up (EXTRA_BOMB)
 	// 2. Fire Up (BOMB_RANGE)
 	// 3. Cor / Heart Shield (HEART_SHIELD)
-	// 4. Speed Up / Roller Skate (SPEED_UP)
+	// 4. Speed Up / Roller Skate (SPEED_UP) — excluded once speed cap is reached
+	if(!allowSpeedUp)
+	{
+		int roll = rand() % 100;
+		if(roll < 37) return EXTRA_BOMB;
+		if(roll < 74) return BOMB_RANGE;
+		return HEART_SHIELD;
+	}
+
 	int roll = rand() % 100;
 	if(roll < 28) return EXTRA_BOMB;
 	if(roll < 56) return BOMB_RANGE;

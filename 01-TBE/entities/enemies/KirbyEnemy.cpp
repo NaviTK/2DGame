@@ -166,50 +166,56 @@ void KirbyEnemy::update(int deltaTime, TileMap *map)
 		onGround = false;
 	}
 
-	// 2. Proximity detection: Enemy Type 2 (Pursuer / Aggressive)
-	// Detects Bomberman's position by proximity and accelerates toward him to intercept him.
-	float myCenterX = pos.x + tSize * 0.5f;
+	// 2. Check if the player is on the same platform height
 	float myBottomY = pos.y + colOffset.y + colSize.y;
-	float playerCenterX = targetPlayerPos_.x + targetPlayerSize_.x * 0.5f;
 	float playerBottomY = targetPlayerPos_.y + targetPlayerSize_.y;
-	float distX = std::fabs(playerCenterX - myCenterX);
-	float distY = std::fabs(playerBottomY - myBottomY);
+	bool samePlatformHeight = targetPlayerAlive_ && onGround &&
+	                          (std::fabs(playerBottomY - myBottomY) <= tSize * 0.55f);
 
-	bool inProximity = targetPlayerAlive_ && onGround &&
-	                   (distX <= tSize * 6.5f) && (distY <= tSize * 2.2f);
-
-	if(inProximity)
+	// Periodically decide whether to randomly move towards the player (if on the same platform)
+	// or wander/change direction along the platform
+	decisionTimer -= float(dt);
+	if(decisionTimer <= 0.0f)
 	{
-		int desiredDir = (playerCenterX < myCenterX) ? DIR_LEFT : DIR_RIGHT;
-		if(!chasingPlayer)
+		decisionTimer = float(800 + (rand() % 900));
+		if(samePlatformHeight)
 		{
-			chasingPlayer = true;
-			direction = desiredDir;
-			pauseTimer = 90.0f;
-			if(sprite != NULL)
-				sprite->changeAnimation(ALERT_FRONT);
+			// 65% probability to lock onto the player when on the same platform
+			if((rand() % 100) < 65)
+			{
+				float myCenterX = pos.x + tSize * 0.5f;
+				float playerCenterX = targetPlayerPos_.x + targetPlayerSize_.x * 0.5f;
+				int desiredDir = (playerCenterX < myCenterX) ? DIR_LEFT : DIR_RIGHT;
+				if(!chasingPlayer || direction != desiredDir)
+				{
+					direction = desiredDir;
+					pauseTimer = 160.0f;
+					if(sprite != NULL)
+						sprite->changeAnimation(ALERT_FRONT);
+				}
+				chasingPlayer = true;
+			}
+			else
+			{
+				chasingPlayer = false;
+			}
 		}
 		else
 		{
-			direction = desiredDir;
-		}
-	}
-	else
-	{
-		chasingPlayer = false;
-		decisionTimer -= float(dt);
-		if(decisionTimer <= 0.0f)
-		{
-			decisionTimer = float(900 + (rand() % 800));
+			chasingPlayer = false;
+			// Occasional random direction change while wandering
 			if((rand() % 100) < 25)
 			{
 				reverseDirection();
-				pauseTimer = 120.0f;
+				pauseTimer = 130.0f;
 				if(sprite != NULL)
 					sprite->changeAnimation(SMILE_FRONT);
 			}
 		}
 	}
+
+	if(!samePlatformHeight)
+		chasingPlayer = false;
 
 	// 3. Handle brief turn/alert pause
 	if(pauseTimer > 0.0f)
@@ -220,8 +226,8 @@ void KirbyEnemy::update(int deltaTime, TileMap *map)
 		return;
 	}
 
-	// Accelerate substantially when pursuing Bomberman (1.9x normal patrol speed)
-	speed = chasingPlayer ? (tSize * 0.0040f) : (tSize * 0.0021f);
+	// Move slightly faster when actively chasing the player on the same platform
+	speed = chasingPlayer ? (tSize * 0.0030f) : (tSize * 0.0020f);
 	float moveDist = speed * float(dt);
 	glm::vec2 minCoords = map->getMinCoords();
 	int supportTileY = int(std::floor((pos.y + colOffset.y + colSize.y + 1.0f - minCoords.y) / tSize));

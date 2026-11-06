@@ -53,7 +53,7 @@ public:
 
 	// Source rectangle of the item panel inside images/caracters.png (shared with the HUD)
 	static glm::ivec2 getSheetCoords(PowerUpType type);
-	static PowerUpType rollRandomType();
+	static PowerUpType rollRandomType(bool allowSpeedUp = true);
 
 private:
 	glm::vec2 pos;

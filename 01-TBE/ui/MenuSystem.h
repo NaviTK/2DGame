@@ -15,12 +15,13 @@ class Scene;
 
 
 // High-level application states (Pocket Bomberman style flow):
-//   TITLE -> MAIN_MENU -> SLOT_SELECT (new / load / save) -> WORLD_SELECT -> PLAYING
+//   TITLE -> MAIN_MENU -> PLAY_SUBMENU -> SLOT_SELECT (load / save) -> WORLD_SELECT -> PLAYING
 //   PLAYING <-> PAUSED, PLAYING -> WORLD_CLEAR -> WORLD_SELECT, PLAYING -> GAME_OVER
 enum GameState
 {
 	STATE_TITLE,
 	STATE_MAIN_MENU,
+	STATE_PLAY_SUBMENU,
 	STATE_CONTROLS,
 	STATE_CREDITS,
 	STATE_SLOT_SELECT,
@@ -73,6 +74,7 @@ private:
 	// Per-state logic
 	void updateTitle(int deltaTime);
 	void updateMainMenu(int deltaTime);
+	void updatePlaySubmenu(int deltaTime);
 	void updateControls(int deltaTime);
 	void updateCredits(int deltaTime);
 	void updateSlotSelect(int deltaTime);
@@ -98,6 +100,7 @@ private:
 	void renderLogo(float x, float y, float width);
 	void renderTitle();
 	void renderMainMenu();
+	void renderPlaySubmenu();
 	void renderControls();
 	void renderCredits();
 	void renderSlotSelect();
@@ -140,6 +143,7 @@ private:
 	bool quit_;
 
 	int mainSel_;
+	int playSubSel_;
 	int slotSel_;       // 0..2 = slots, 3 = VOLVER button
 	SlotMode slotMode_;
 	int pauseSel_;

@@ -22,6 +22,11 @@
 #define UTF8_O_AC   "\xC3\x93"
 #define UTF8_U_AC   "\xC3\x9A"
 #define UTF8_N_TLD  "\xC3\x91"
+#define UTF8_A_GR   "\xC3\x80"
+#define UTF8_E_GR   "\xC3\x88"
+#define UTF8_O_GR   "\xC3\x92"
+#define UTF8_U_UML  "\xC3\x9C"
+#define UTF8_C_CED  "\xC3\x87"
 
 
 namespace
@@ -52,6 +57,7 @@ MenuSystem::MenuSystem()
 	quit_ = false;
 
 	mainSel_ = 0;
+	playSubSel_ = 0;
 	slotSel_ = 0;
 	slotMode_ = SLOT_NEW;
 	pauseSel_ = 0;
@@ -205,7 +211,11 @@ void MenuSystem::enterState(GameState newState)
 	stateTime_ = 0.0f;
 	confirmOpen_ = false;
 
-	if(state_ == STATE_WORLD_SELECT)
+	if(state_ == STATE_PLAY_SUBMENU)
+	{
+		playSubSel_ = 0;
+	}
+	else if(state_ == STATE_WORLD_SELECT)
 	{
 		SaveSystem::instance().loadAllSlots();
 		const WorldDef *w = SaveSystem::instance().getWorldById(worldSel_);
@@ -288,7 +298,7 @@ void MenuSystem::resolveConfirm(bool accepted)
 		SaveSystem::instance().deleteSlot(slotSel_);
 		if(currentSlot_ == slotSel_)
 			currentSlot_ = -1;
-		showToast("RANURA " + intToStr(slotSel_ + 1) + " BORRADA");
+		showToast("RANURA " + intToStr(slotSel_ + 1) + " ESBORRADA");
 	}
 }
 
@@ -347,6 +357,7 @@ bool MenuSystem::update(int deltaTime)
 	{
 	case STATE_TITLE:        updateTitle(deltaTime);       break;
 	case STATE_MAIN_MENU:    updateMainMenu(deltaTime);    break;
+	case STATE_PLAY_SUBMENU: updatePlaySubmenu(deltaTime); break;
 	case STATE_CONTROLS:     updateControls(deltaTime);    break;
 	case STATE_CREDITS:      updateCredits(deltaTime);     break;
 	case STATE_SLOT_SELECT:  updateSlotSelect(deltaTime);  break;
@@ -404,7 +415,7 @@ void MenuSystem::updateTitle(int deltaTime)
 void MenuSystem::updateMainMenu(int deltaTime)
 {
 	(void)deltaTime;
-	const int itemCount = 5;
+	const int itemCount = 4;
 
 	// Direct level debug keys ('1'..'5') also work from the Main Menu for instant evaluation
 	for(int lvl = 1; lvl <= 5; lvl++)
@@ -425,7 +436,7 @@ void MenuSystem::updateMainMenu(int deltaTime)
 	else if(pressedDown())
 		mainSel_ = (mainSel_ + 1) % itemCount;
 
-	int hovered = hitTestMenuList(itemCount, 160.0f, 110.0f, 18.0f, 180.0f);
+	int hovered = hitTestMenuList(itemCount, 160.0f, 112.0f, 18.0f, 180.0f);
 	if(hovered >= 0 && Game::instance().didMouseMove())
 		mainSel_ = hovered;
 
@@ -437,15 +448,9 @@ void MenuSystem::updateMainMenu(int deltaTime)
 	{
 		switch(mainSel_)
 		{
-		case 0: // JUGAR (Starts Level 1 immediately with 3 lives)
-			freePlayMode_ = true;
-			save_.resetDefaults();
-			save_.lives = 3;
-			save_.currentWorld = 1;
-			save_.highestUnlockedWorld = SaveSystem::instance().getWorldCount();
-			worldSel_ = 1;
-			clearGameComplete_ = false;
-			changeState(STATE_PLAYING, ACTION_START_WORLD);
+		case 0: // JUGAR -> Opens Play Submenu (CREAR PARTIDA / CARREGAR PARTIDA / TORNAR)
+			playSubSel_ = 0;
+			changeState(STATE_PLAY_SUBMENU);
 			break;
 		case 1: // INSTRUCCIONS
 			changeState(STATE_CONTROLS);
@@ -454,10 +459,7 @@ void MenuSystem::updateMainMenu(int deltaTime)
 			clearGameComplete_ = false;
 			changeState(STATE_CREDITS);
 			break;
-		case 3: // MAPA DE NIVELLS / PARTIDES
-			openDirectWorldSelect();
-			break;
-		case 4: // SORTIR
+		case 3: // SORTIR
 			quit_ = true;
 			break;
 		}
@@ -465,6 +467,67 @@ void MenuSystem::updateMainMenu(int deltaTime)
 	else if(pressedBack())
 	{
 		quit_ = true;
+	}
+}
+
+void MenuSystem::updatePlaySubmenu(int deltaTime)
+{
+	(void)deltaTime;
+	const int itemCount = 3;
+
+	if(pressedUp())
+		playSubSel_ = (playSubSel_ + itemCount - 1) % itemCount;
+	else if(pressedDown())
+		playSubSel_ = (playSubSel_ + 1) % itemCount;
+
+	int hovered = hitTestMenuList(itemCount, 160.0f, 116.0f, 19.0f, 180.0f);
+	if(hovered >= 0 && Game::instance().didMouseMove())
+		playSubSel_ = hovered;
+
+	bool clicked = (hovered >= 0 && Game::instance().mouseJustPressed(GLFW_MOUSE_BUTTON_LEFT));
+	if(clicked)
+		playSubSel_ = hovered;
+
+	if(pressedConfirm() || clicked)
+	{
+		switch(playSubSel_)
+		{
+		case 0: // CREAR PARTIDA
+		{
+			SaveSystem::instance().loadAllSlots();
+			int slot = SaveSystem::instance().findFirstFreeOrDefaultSlot();
+			currentSlot_ = slot;
+			freePlayMode_ = false;
+			clearGameComplete_ = false;
+			save_.resetDefaults();
+			save_.occupied = true;
+			save_.lives = 3;
+			save_.currentWorld = 1;
+			save_.highestUnlockedWorld = 1;
+			save_.timestamp = SaveSystem::buildCurrentTimestamp();
+			SaveSystem::instance().saveSlot(slot, save_);
+
+			worldSel_ = 1;
+			traveling_ = false;
+			const WorldDef *w1 = SaveSystem::instance().getWorldById(1);
+			if(w1 != NULL)
+				cursorPos_ = w1->mapNodePos;
+
+			showToast("NOVA PARTIDA - RANURA " + intToStr(slot + 1));
+			changeState(STATE_WORLD_SELECT);
+			break;
+		}
+		case 1: // CARREGAR PARTIDA
+			openSlotScreen(SLOT_LOAD, STATE_PLAY_SUBMENU);
+			break;
+		case 2: // TORNAR
+			changeState(STATE_MAIN_MENU);
+			break;
+		}
+	}
+	else if(pressedBack())
+	{
+		changeState(STATE_MAIN_MENU);
 	}
 }
 
@@ -530,8 +593,8 @@ void MenuSystem::updateSlotSelect(int deltaTime)
 	{
 		slotSel_ = clickedDeleteSlot;
 		openConfirm(CONFIRM_DELETE,
-		            UTF8_INV_QM "BORRAR RANURA " + intToStr(slotSel_ + 1) + "?",
-		            "SE ELIMINAR" UTF8_A_AC " ESTE PROGRESO");
+		            "ESBORRAR RANURA " + intToStr(slotSel_ + 1) + "?",
+		            "S'ELIMINAR" UTF8_A_GR " AQUEST PROGR" UTF8_E_AC "S");
 		return;
 	}
 
@@ -540,8 +603,8 @@ void MenuSystem::updateSlotSelect(int deltaTime)
 	   (Game::instance().justPressed(GLFW_KEY_DELETE) || Game::instance().justPressed(GLFW_KEY_X)))
 	{
 		openConfirm(CONFIRM_DELETE,
-		            UTF8_INV_QM "BORRAR RANURA " + intToStr(slotSel_ + 1) + "?",
-		            "SE ELIMINAR" UTF8_A_AC " ESTE PROGRESO");
+		            "ESBORRAR RANURA " + intToStr(slotSel_ + 1) + "?",
+		            "S'ELIMINAR" UTF8_A_GR " AQUEST PROGR" UTF8_E_AC "S");
 		return;
 	}
 
@@ -560,7 +623,7 @@ void MenuSystem::updateSlotSelect(int deltaTime)
 
 	if(pressedConfirm() || clicked)
 	{
-		if(slotSel_ == SaveSystem::NUM_SLOTS) // VOLVER
+		if(slotSel_ == SaveSystem::NUM_SLOTS) // TORNAR
 		{
 			if(slotReturnState_ == STATE_PAUSED)
 				state_ = STATE_PAUSED;
@@ -575,8 +638,8 @@ void MenuSystem::updateSlotSelect(int deltaTime)
 			if(slotData.occupied)
 			{
 				openConfirm(CONFIRM_OVERWRITE_NEW,
-				            UTF8_INV_QM "SOBRESCRIBIR RANURA " + intToStr(slotSel_ + 1) + "?",
-				            "EMPEZAR" UTF8_A_AC "S DESDE EL MUNDO 1");
+				            "SOBREESCRIURE RANURA " + intToStr(slotSel_ + 1) + "?",
+				            "COMEN" UTF8_C_CED "AR" UTF8_A_GR "S DES DEL NIVELL 1");
 			}
 			else
 			{
@@ -588,7 +651,7 @@ void MenuSystem::updateSlotSelect(int deltaTime)
 			if(!slotData.occupied)
 			{
 				shakeTimer_ = 280.0f;
-				showToast(UTF8_INV_EX "RANURA VAC" UTF8_I_AC "A! USA EMPEZAR PARTIDA");
+				showToast("RANURA BUIDA! TRIA CREAR PARTIDA");
 			}
 			else
 			{
@@ -600,8 +663,8 @@ void MenuSystem::updateSlotSelect(int deltaTime)
 			if(slotData.occupied && slotSel_ != currentSlot_)
 			{
 				openConfirm(CONFIRM_OVERWRITE_SAVE,
-				            UTF8_INV_QM "SOBRESCRIBIR RANURA " + intToStr(slotSel_ + 1) + "?",
-				            "SE REEMPLAZAR" UTF8_A_AC " LA PARTIDA ANTERIOR");
+				            "SOBREESCRIURE RANURA " + intToStr(slotSel_ + 1) + "?",
+				            "ES REEMPLA" UTF8_C_CED "AR" UTF8_A_GR " LA PARTIDA ANTERIOR");
 			}
 			else
 			{
@@ -659,7 +722,7 @@ void MenuSystem::updateWorldSelect(int deltaTime)
 	if(Game::instance().justPressed(GLFW_KEY_U))
 	{
 		save_.highestUnlockedWorld = worldCount;
-		showToast(UTF8_INV_EX "TODOS LOS MUNDOS DESBLOQUEADOS!");
+		showToast("TOTS ELS NIVELLS DESBLOQUEJATS!");
 	}
 
 	// 'G' opens manual save slot picker
@@ -698,7 +761,7 @@ void MenuSystem::updateWorldSelect(int deltaTime)
 		if(!isWorldUnlocked(worldSel_))
 		{
 			shakeTimer_ = 280.0f;
-			showToast(UTF8_INV_EX "SUPERA EL MUNDO " + intToStr(worldSel_ - 1) + " PRIMERO! (U: LIBRE)");
+			showToast("SUPERA EL NIVELL " + intToStr(worldSel_ - 1) + " PRIMER!");
 		}
 		else
 		{
@@ -806,7 +869,7 @@ void MenuSystem::updatePlaying(int deltaTime)
 void MenuSystem::updatePaused(int deltaTime)
 {
 	(void)deltaTime;
-	const int itemCount = 6;
+	const int itemCount = 5;
 
 	if(pressedPause())
 	{
@@ -820,7 +883,7 @@ void MenuSystem::updatePaused(int deltaTime)
 	else if(pressedDown())
 		pauseSel_ = (pauseSel_ + 1) % itemCount;
 
-	int hovered = hitTestMenuList(itemCount, 160.0f, 89.0f, 16.0f, 168.0f);
+	int hovered = hitTestMenuList(itemCount, 160.0f, 94.0f, 17.0f, 168.0f);
 	if(hovered >= 0 && Game::instance().didMouseMove())
 		pauseSel_ = hovered;
 
@@ -836,22 +899,19 @@ void MenuSystem::updatePaused(int deltaTime)
 			state_ = STATE_PLAYING;
 			scene_->syncPlayerInputLatch();
 			break;
-		case 1: // REINICIAR MUNDO
+		case 1: // REINICIAR NIVELL
 			changeState(STATE_PLAYING, ACTION_RESTART_WORLD);
 			break;
-		case 2: // GUARDAR PARTIDA
+		case 2: // DESAR PARTIDA
 			scene_->exportSaveData(save_);
 			openSlotScreen(SLOT_SAVE, STATE_PAUSED);
 			break;
-		case 3: // CARGAR PARTIDA
-			openSlotScreen(SLOT_LOAD, STATE_PAUSED);
-			break;
-		case 4: // SELECCIONAR MUNDO
+		case 3: // MAPA DE NIVELLS
 			scene_->exportSaveData(save_);
 			worldSel_ = scene_->getCurrentLevel();
 			changeState(STATE_WORLD_SELECT);
 			break;
-		case 5: // MENU PRINCIPAL
+		case 4: // MENU PRINCIPAL
 			changeState(STATE_MAIN_MENU);
 			break;
 		}
@@ -963,7 +1023,7 @@ void MenuSystem::startNewGame(int slot)
 	if(w1 != NULL)
 		cursorPos_ = w1->mapNodePos;
 
-	showToast("NUEVA PARTIDA - RANURA " + intToStr(slot + 1));
+	showToast("NOVA PARTIDA - RANURA " + intToStr(slot + 1));
 	changeState(STATE_WORLD_SELECT);
 }
 
@@ -977,13 +1037,14 @@ void MenuSystem::loadGame(int slot)
 	currentSlot_ = slot;
 	freePlayMode_ = false;
 	save_ = loaded;
-	worldSel_ = save_.currentWorld;
+	worldSel_ = std::max(1, save_.highestUnlockedWorld);
+	save_.currentWorld = worldSel_;
 	traveling_ = false;
 	const WorldDef *w = SaveSystem::instance().getWorldById(worldSel_);
 	if(w != NULL)
 		cursorPos_ = w->mapNodePos;
 
-	showToast("PARTIDA CARGADA - RANURA " + intToStr(slot + 1));
+	showToast("PARTIDA CARREGADA - RANURA " + intToStr(slot + 1));
 	changeState(STATE_WORLD_SELECT);
 }
 
@@ -999,7 +1060,7 @@ void MenuSystem::saveGameToSlot(int slot)
 	save_.occupied = true;
 	save_.timestamp = SaveSystem::buildCurrentTimestamp();
 	SaveSystem::instance().saveSlot(slot, save_);
-	showToast(UTF8_INV_EX "GUARDADO EN RANURA " + intToStr(slot + 1) + "!");
+	showToast("DESAT A LA RANURA " + intToStr(slot + 1) + "!");
 
 	if(slotReturnState_ == STATE_PAUSED)
 		state_ = STATE_PAUSED;
@@ -1196,6 +1257,7 @@ void MenuSystem::render()
 	{
 	case STATE_TITLE:        renderTitle();       break;
 	case STATE_MAIN_MENU:    renderMainMenu();    break;
+	case STATE_PLAY_SUBMENU: renderPlaySubmenu(); break;
 	case STATE_CONTROLS:     renderControls();    break;
 	case STATE_CREDITS:      renderCredits();     break;
 	case STATE_SLOT_SELECT:  renderSlotSelect();  break;
@@ -1262,10 +1324,10 @@ void MenuSystem::renderTitle()
 	          glm::vec4(0.06f, 0.10f, 0.24f, 0.88f), COL_PANEL_BORDER);
 	if((int(time_ / 450.0f) % 2) == 0)
 	{
-		ui_.textCentered("PULSA ENTER O CLIC", 160.0f, 159.0f, 1.0f, COL_GOLD);
+		ui_.textCentered("PREM ENTER O CLIC", 160.0f, 159.0f, 1.0f, COL_GOLD);
 	}
 
-	renderHint("ENTER / ESPACIO: MENU     ESC: SALIR");
+	renderHint("ENTER / ESPAI: MEN" UTF8_U_AC "     ESC: SORTIR");
 }
 
 void MenuSystem::renderMainMenu()
@@ -1273,18 +1335,34 @@ void MenuSystem::renderMainMenu()
 	renderTitleBackground(0.16f);
 	renderLogo(62.0f, 8.0f, 196.0f);
 
-	ui_.panel(glm::vec2(58.0f, 98.0f), glm::vec2(204.0f, 116.0f), COL_PANEL_BG, COL_PANEL_BORDER);
+	ui_.panel(glm::vec2(58.0f, 100.0f), glm::vec2(204.0f, 88.0f), COL_PANEL_BG, COL_PANEL_BORDER);
 
 	std::vector<std::string> items;
 	items.push_back("JUGAR");
 	items.push_back("INSTRUCCIONS");
 	items.push_back("CR" UTF8_E_AC "DITS");
-	items.push_back("MAPA / PARTIDES");
 	items.push_back("SORTIR");
 	std::vector<bool> enabled(items.size(), true);
 
-	renderMenuList(items, enabled, mainSel_, 160.0f, 110.0f, 18.0f, 180.0f);
+	renderMenuList(items, enabled, mainSel_, 160.0f, 112.0f, 18.0f, 180.0f);
 	renderHint("FLETXES/RATOL" UTF8_I_AC ": MOURE   ENTER: TRIAR");
+}
+
+void MenuSystem::renderPlaySubmenu()
+{
+	renderTitleBackground(0.16f);
+	renderLogo(62.0f, 8.0f, 196.0f);
+
+	ui_.panel(glm::vec2(58.0f, 104.0f), glm::vec2(204.0f, 70.0f), COL_PANEL_BG, COL_PANEL_BORDER);
+
+	std::vector<std::string> items;
+	items.push_back("CREAR PARTIDA");
+	items.push_back("CARREGAR PARTIDA");
+	items.push_back("TORNAR");
+	std::vector<bool> enabled(items.size(), true);
+
+	renderMenuList(items, enabled, playSubSel_, 160.0f, 116.0f, 19.0f, 180.0f);
+	renderHint("FLETXES/RATOL" UTF8_I_AC ": MOURE   ENTER: TRIAR   ESC: TORNAR");
 }
 
 void MenuSystem::renderControls()
@@ -1306,12 +1384,12 @@ void MenuSystem::renderControls()
 
 	// Bottom-Left: Mechanics
 	ui_.rect(glm::vec2(16.0f, 99.0f), glm::vec2(136.0f, 1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 0.2f));
-	ui_.text("2. MECANIQUES", glm::vec2(16.0f, 103.0f), 1.0f, COL_SKY);
+	ui_.text("2. MEC" UTF8_A_GR "NIQUES", glm::vec2(16.0f, 103.0f), 1.0f, COL_SKY);
 	ui_.text("- ELIMINA TOTS ELS",  glm::vec2(16.0f, 114.0f), 1.0f, COL_CREAM);
 	ui_.text("  ENEMICS PER OBRIR", glm::vec2(16.0f, 124.0f), 1.0f, COL_CREAM);
 	ui_.text("  LA PORTA FINAL.",   glm::vec2(16.0f, 134.0f), 1.0f, COL_CREAM);
 	ui_.text("- SALTA SOBRE LES",   glm::vec2(16.0f, 146.0f), 1.0f, COL_GREEN);
-	ui_.text("  BOMBES (SOLIDES)!", glm::vec2(16.0f, 156.0f), 1.0f, COL_GREEN);
+	ui_.text("  BOMBES (S" UTF8_O_GR "LIDES)!", glm::vec2(16.0f, 156.0f), 1.0f, COL_GREEN);
 	ui_.text("- 3 VIDES / CRONO:",  glm::vec2(16.0f, 168.0f), 1.0f, COL_WHITE);
 	ui_.text("  0 VIDES = GAME OVER",glm::vec2(16.0f, 178.0f), 1.0f, COL_RED);
 
@@ -1358,9 +1436,9 @@ void MenuSystem::renderControls()
 
 	ui_.panel(glm::vec2(106.0f, 196.0f), glm::vec2(108.0f, 16.0f),
 	          glm::vec4(0.14f, 0.22f, 0.44f, 1.0f), COL_GOLD);
-	ui_.textCentered("TORNAR AL MENU", 160.0f, 200.0f, 1.0f, COL_GOLD);
+	ui_.textCentered("TORNAR AL MEN" UTF8_U_AC, 160.0f, 200.0f, 1.0f, COL_GOLD);
 
-	renderHint("PREM ENTER, ESC O CLIC PER TORNAR AL MENU");
+	renderHint("PREM ENTER, ESC O CLIC PER TORNAR AL MEN" UTF8_U_AC);
 }
 
 void MenuSystem::renderCredits()
@@ -1385,10 +1463,11 @@ void MenuSystem::renderCredits()
 	ui_.textCentered("PROJECTE DE VIDEOJOCS (C++ / OPENGL 3.3)", 160.0f, 68.0f, 1.0f, COL_CREAM);
 
 	ui_.text("AUTORIA I DESENVOLUPAMENT:", glm::vec2(34.0f, 86.0f), 1.0f, COL_GOLD);
-	ui_.text("- MOTOR GRAFIC, FISIQUES I IA: EQUIP VJ", glm::vec2(34.0f, 98.0f), 1.0f, COL_WHITE);
-	ui_.text("- DISSENY DE 5 NIVELLS I BOSS: EQUIP VJ", glm::vec2(34.0f, 110.0f), 1.0f, COL_WHITE);
-	ui_.text("- ARQUITECTURA: OBJECT POOL + MATRIU 3D", glm::vec2(34.0f, 122.0f), 1.0f, COL_WHITE);
-	ui_.text("- SPRITES ORIGINALS: HUDSON SOFT (1997)", glm::vec2(34.0f, 134.0f), 1.0f, COL_MUTED);
+	const float creditScale = 2.0f / 3.0f;
+	ui_.text("- MOTOR GRAFIC, FISIQUES I IA: Pol Sau i Ivan Gonzalez", glm::vec2(34.0f, 98.0f), creditScale, COL_WHITE);
+	ui_.text("- DISSENY DE 5 NIVELLS I BOSS: Pol Sau i Ivan Gonzalez", glm::vec2(34.0f, 110.0f), creditScale, COL_WHITE);
+	ui_.text("- ARQUITECTURA: OBJECT POOL + MATRIU 3D", glm::vec2(34.0f, 122.0f), creditScale, COL_WHITE);
+	ui_.text("- SPRITES ORIGINALS: HUDSON SOFT (1997)", glm::vec2(34.0f, 134.0f), creditScale, COL_MUTED);
 
 	// Animated parade of Bomberman, the 3 Enemies, and the Final Boss
 	int step = (int(time_ / 180.0f) % 2);
@@ -1400,9 +1479,9 @@ void MenuSystem::renderCredits()
 
 	ui_.panel(glm::vec2(104.0f, 190.0f), glm::vec2(112.0f, 18.0f),
 	          glm::vec4(0.14f, 0.22f, 0.44f, 1.0f), COL_GOLD);
-	ui_.textCentered("MENU PRINCIPAL", 160.0f, 195.0f, 1.0f, COL_GOLD);
+	ui_.textCentered("MEN" UTF8_U_AC " PRINCIPAL", 160.0f, 195.0f, 1.0f, COL_GOLD);
 
-	renderHint("PREM ENTER, ESC O CLIC PER TORNAR AL MENU");
+	renderHint("PREM ENTER, ESC O CLIC PER TORNAR AL MEN" UTF8_U_AC);
 }
 
 void MenuSystem::renderSlotSelect()
@@ -1412,17 +1491,17 @@ void MenuSystem::renderSlotSelect()
 	else
 		renderTitleBackground(0.58f);
 
-	std::string header = "CARGAR PARTIDA";
-	std::string sub    = "SELECCIONA UNA PARTIDA GUARDADA";
+	std::string header = "CARREGAR PARTIDA";
+	std::string sub    = "TRIA LA PARTIDA QUE VOLS CARREGAR";
 	if(slotMode_ == SLOT_NEW)
 	{
-		header = "EMPEZAR PARTIDA";
-		sub    = "ELIGE UNA RANURA PARA TU AVENTURA";
+		header = "NOVA PARTIDA";
+		sub    = "TRIA UNA RANURA PER COMEN" UTF8_C_CED "AR";
 	}
 	else if(slotMode_ == SLOT_SAVE)
 	{
-		header = "GUARDAR PARTIDA";
-		sub    = "ELIGE D" UTF8_O_AC "NDE GUARDAR EL PROGRESO";
+		header = "DESAR PARTIDA";
+		sub    = "TRIA ON DESAR EL TEU PROGR" UTF8_E_AC "S";
 	}
 
 	ui_.textCentered(header, 160.0f, 9.0f, 2.0f, COL_GOLD);
@@ -1436,20 +1515,20 @@ void MenuSystem::renderSlotSelect()
 		renderSlotCard(i, cardPos, glm::vec2(276.0f, 45.0f), slotSel_ == i);
 	}
 
-	// Bottom [ VOLVER ] button
+	// Bottom [ TORNAR ] button
 	bool backSel = (slotSel_ == SaveSystem::NUM_SLOTS);
 	glm::vec2 backPos(112.0f, 198.0f), backSz(96.0f, 18.0f);
 	ui_.panel(backPos, backSz,
 	          backSel ? glm::vec4(0.18f, 0.28f, 0.56f, 0.96f) : COL_PANEL_BG,
 	          backSel ? COL_GOLD : COL_MUTED);
-	ui_.textCentered("VOLVER", 160.0f, 203.0f, 1.0f, backSel ? COL_GOLD : COL_WHITE);
+	ui_.textCentered("TORNAR", 160.0f, 203.0f, 1.0f, backSel ? COL_GOLD : COL_WHITE);
 	if(backSel)
 		renderBombCursor(glm::vec2(backPos.x - 14.0f, backPos.y + 3.0f), 12.0f);
 
 	if(slotSel_ < SaveSystem::NUM_SLOTS && SaveSystem::instance().getSlot(slotSel_).occupied)
-		renderHint("ENTER: ELEGIR   SUPR/X: BORRAR   ESC: VOLVER");
+		renderHint("ENTER: TRIAR   SUPR/X: ESBORRAR   ESC: TORNAR");
 	else
-		renderHint("ENTER/CLIC: ELEGIR     ESC: VOLVER");
+		renderHint("ENTER/CLIC: TRIAR     ESC: TORNAR");
 }
 
 void MenuSystem::renderSlotCard(int slot, const glm::vec2 &pos, const glm::vec2 &size, bool selected)
@@ -1489,7 +1568,7 @@ void MenuSystem::renderSlotCard(int slot, const glm::vec2 &pos, const glm::vec2 
 		ui_.rect(delPos, glm::vec2(15.0f, 12.0f), delHover ? COL_RED : glm::vec4(0.42f, 0.14f, 0.18f, 0.9f));
 		ui_.textCentered("X", delPos.x + 7.5f, delPos.y + 2.0f, 1.0f, COL_WHITE, false);
 
-		std::string worldLabel = (wDef != NULL) ? (wDef->name + ": " + wDef->themeName) : ("MUNDO " + intToStr(d.currentWorld));
+		std::string worldLabel = (wDef != NULL) ? (wDef->name + ": " + wDef->themeName) : ("NIVELL " + intToStr(d.currentWorld));
 		ui_.text(worldLabel, glm::vec2(pos.x + 44.0f, pos.y + 19.0f), 1.0f, COL_CREAM);
 
 		int totalW = SaveSystem::instance().getWorldCount();
@@ -1502,9 +1581,9 @@ void MenuSystem::renderSlotCard(int slot, const glm::vec2 &pos, const glm::vec2 
 	{
 		ui_.textCentered("-", badgePos.x + 15.5f, badgePos.y + 11.0f, 1.0f, COL_MUTED);
 		ui_.text("RANURA " + intToStr(slot + 1), glm::vec2(pos.x + 44.0f, pos.y + 9.0f), 1.0f, selected ? COL_GOLD : COL_MUTED);
-		ui_.text("--- RANURA VAC" UTF8_I_AC "A ---", glm::vec2(pos.x + 44.0f, pos.y + 24.0f), 1.0f, COL_MUTED);
+		ui_.text("--- RANURA BUIDA ---", glm::vec2(pos.x + 44.0f, pos.y + 24.0f), 1.0f, COL_MUTED);
 		if(slotMode_ != SLOT_LOAD)
-			ui_.textRight("LIBRE", pos.x + size.x - 10.0f, pos.y + 24.0f, 1.0f, COL_GREEN);
+			ui_.textRight("LLIURE", pos.x + size.x - 10.0f, pos.y + 24.0f, 1.0f, COL_GREEN);
 	}
 }
 
@@ -1517,7 +1596,7 @@ void MenuSystem::renderWorldSelect()
 
 	// Top status bar
 	ui_.panel(glm::vec2(6.0f, 4.0f), glm::vec2(308.0f, 22.0f), COL_PANEL_BG, COL_PANEL_BORDER);
-	std::string slotTag = (currentSlot_ >= 0) ? ("RANURA " + intToStr(currentSlot_ + 1)) : "MODO LIBRE";
+	std::string slotTag = (currentSlot_ >= 0) ? ("RANURA " + intToStr(currentSlot_ + 1)) : "MODE LLIURE";
 	int totalW = SaveSystem::instance().getWorldCount();
 	slotTag += std::string("  " UTF8_STAR) + intToStr(save_.countCompletedWorlds(totalW)) + "/" + intToStr(totalW);
 	ui_.text(slotTag, glm::vec2(14.0f, 11.0f), 1.0f, COL_GOLD);
@@ -1595,7 +1674,7 @@ void MenuSystem::renderWorldNodes()
 		// World number badge below the node
 		ui_.rect(glm::vec2(w.mapNodePos.x - 10.0f, w.mapNodePos.y + 10.0f),
 		         glm::vec2(20.0f, 10.0f), glm::vec4(0.04f, 0.07f, 0.16f, 0.88f));
-		ui_.textCentered("M" + intToStr(w.id), w.mapNodePos.x, w.mapNodePos.y + 11.0f, 1.0f,
+		ui_.textCentered("N" + intToStr(w.id), w.mapNodePos.x, w.mapNodePos.y + 11.0f, 1.0f,
 		                 selected ? COL_GOLD : COL_WHITE);
 
 		if(completed)
@@ -1620,11 +1699,11 @@ void MenuSystem::renderWorldInfoPanel()
 	ui_.text(title, glm::vec2(pPos.x + 10.0f, pPos.y + 7.0f), 1.0f, COL_GOLD);
 
 	if(completed)
-		ui_.text(UTF8_STAR " COMPLETADO", glm::vec2(pPos.x + 10.0f, pPos.y + 19.0f), 1.0f, COL_GREEN);
+		ui_.text(UTF8_STAR " COMPLETAT", glm::vec2(pPos.x + 10.0f, pPos.y + 19.0f), 1.0f, COL_GREEN);
 	else if(unlocked)
 		ui_.text(UTF8_ARR_R " DISPONIBLE", glm::vec2(pPos.x + 10.0f, pPos.y + 19.0f), 1.0f, COL_SKY);
 	else
-		ui_.text("BLOQUEADO (SUPERA M" + intToStr(w->id - 1) + ")", glm::vec2(pPos.x + 10.0f, pPos.y + 19.0f), 1.0f, COL_RED);
+		ui_.text("BLOQUEJAT", glm::vec2(pPos.x + 10.0f, pPos.y + 19.0f), 1.0f, COL_RED);
 
 	// Enemy preview sprites
 	ui_.text("FAUNA:", glm::vec2(pPos.x + 128.0f, pPos.y + 19.0f), 1.0f, COL_MUTED);
@@ -1658,11 +1737,11 @@ void MenuSystem::renderWorldInfoPanel()
 	          unlocked ? (btnHover ? glm::vec4(0.20f, 0.42f, 0.24f, 1.0f) : glm::vec4(0.12f, 0.28f, 0.18f, 1.0f))
 	                   : glm::vec4(0.20f, 0.20f, 0.26f, 1.0f),
 	          unlocked ? COL_GOLD : COL_MUTED);
-	ui_.textCentered(unlocked ? "JUGAR" : "CERRADO", playBtn.x + 31.0f, playBtn.y + 6.0f, 1.0f,
+	ui_.textCentered(unlocked ? "JUGAR" : "BLOQUEJAT", playBtn.x + 31.0f, playBtn.y + 6.0f, 1.0f,
 	                 unlocked ? COL_GOLD : COL_MUTED);
 
 	ui_.rect(glm::vec2(pPos.x + 8.0f, pPos.y + 34.0f), glm::vec2(pSz.x - 16.0f, 1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 0.15f));
-	ui_.textCentered(UTF8_ARR_L "/" UTF8_ARR_R ": MOVER   ENTER: JUGAR   G: GUARDAR   ESC: MENU",
+	ui_.textCentered(UTF8_ARR_L "/" UTF8_ARR_R ": MOURE   ENTER: JUGAR   G: DESAR   ESC: MEN" UTF8_U_AC,
 	                 160.0f, pPos.y + 39.0f, 1.0f, COL_CREAM);
 }
 
@@ -1811,9 +1890,9 @@ void MenuSystem::renderIntroBanner()
 	ui_.panel(bPos, bSz, glm::vec4(0.05f, 0.09f, 0.22f, 0.90f * alpha),
 	          glm::vec4(1.0f, 0.84f, 0.25f, alpha));
 
-	std::string header = (w != NULL) ? (w->name + " - " + w->themeName) : ("MUNDO " + intToStr(scene_->getCurrentLevel()));
+	std::string header = (w != NULL) ? (w->name + " - " + w->themeName) : ("NIVELL " + intToStr(scene_->getCurrentLevel()));
 	ui_.textCentered(header, 160.0f, 98.0f, 1.0f, glm::vec4(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, alpha));
-	ui_.textCentered(UTF8_INV_EX "ADELANTE!", 160.0f, 114.0f, 1.0f, glm::vec4(1.0f, 1.0f, 1.0f, alpha));
+	ui_.textCentered("SOM-HI!", 160.0f, 114.0f, 1.0f, glm::vec4(1.0f, 1.0f, 1.0f, alpha));
 }
 
 void MenuSystem::renderPickupBanner()
@@ -1821,11 +1900,11 @@ void MenuSystem::renderPickupBanner()
 	if(pickupTimer_ <= 0.0f)
 		return;
 
-	const char *msg = "+MEJORA!";
+	const char *msg = "+MILLORA!";
 	switch(pickupType_)
 	{
-	case EXTRA_BOMB:   msg = "BOMB UP! (+1 BOMBA SIMULTANIA)"; break;
-	case BOMB_RANGE:   msg = "FIRE UP! (+1 ABAST D'EXPLOSIO)"; break;
+	case EXTRA_BOMB:   msg = "BOMB UP! (+1 BOMBA SIMULT" UTF8_A_GR "NIA)"; break;
+	case BOMB_RANGE:   msg = "FIRE UP! (+1 ABAST D'EXPLOSI" UTF8_O_AC ")"; break;
 	case SPEED_UP:     msg = "SPEED UP! (+VELOCITAT)";         break;
 	case HEART_SHIELD: msg = "COR ACTIVAT! (ESCUT 1 IMPACTE)"; break;
 	default: break;
@@ -1843,30 +1922,29 @@ void MenuSystem::renderPause()
 {
 	ui_.fullscreen(glm::vec4(0.03f, 0.05f, 0.12f, 0.68f));
 
-	glm::vec2 pPos(56.0f, 24.0f), pSz(208.0f, 184.0f);
+	glm::vec2 pPos(56.0f, 28.0f), pSz(208.0f, 156.0f);
 	ui_.panel(pPos, pSz, COL_PANEL_BG, COL_PANEL_BORDER);
 
-	ui_.textCentered("PAUSA", 160.0f, 33.0f, 2.0f, COL_GOLD);
+	ui_.textCentered("PAUSA", 160.0f, 37.0f, 2.0f, COL_GOLD);
 
 	const WorldDef *w = SaveSystem::instance().getWorldById(scene_->getCurrentLevel());
-	std::string stageStr = (w != NULL) ? (w->name + ": " + w->themeName) : ("MUNDO " + intToStr(scene_->getCurrentLevel()));
-	ui_.textCentered(stageStr, 160.0f, 55.0f, 1.0f, COL_SKY);
+	std::string stageStr = (w != NULL) ? (w->name + ": " + w->themeName) : ("NIVELL " + intToStr(scene_->getCurrentLevel()));
+	ui_.textCentered(stageStr, 160.0f, 58.0f, 1.0f, COL_SKY);
 
 	const Player &pl = scene_->getPlayer();
-	renderStatsRow(glm::vec2(102.0f, 67.0f), pl.getLives(), pl.getMaxBombs(), pl.getBombRange(), pl.getSpeedUps());
-	ui_.rect(glm::vec2(pPos.x + 12.0f, 82.0f), glm::vec2(pSz.x - 24.0f, 1.0f), glm::vec4(1.0f, 0.82f, 0.25f, 0.4f));
+	renderStatsRow(glm::vec2(102.0f, 70.0f), pl.getLives(), pl.getMaxBombs(), pl.getBombRange(), pl.getSpeedUps());
+	ui_.rect(glm::vec2(pPos.x + 12.0f, 86.0f), glm::vec2(pSz.x - 24.0f, 1.0f), glm::vec4(1.0f, 0.82f, 0.25f, 0.4f));
 
 	std::vector<std::string> items;
 	items.push_back("CONTINUAR");
-	items.push_back("REINICIAR MUNDO");
-	items.push_back("GUARDAR PARTIDA");
-	items.push_back("CARGAR PARTIDA");
-	items.push_back("SELECCIONAR MUNDO");
-	items.push_back("MENU PRINCIPAL");
+	items.push_back("REINICIAR NIVELL");
+	items.push_back("DESAR PARTIDA");
+	items.push_back("MAPA DE NIVELLS");
+	items.push_back("MEN" UTF8_U_AC " PRINCIPAL");
 	std::vector<bool> enabled(items.size(), true);
 
-	renderMenuList(items, enabled, pauseSel_, 160.0f, 89.0f, 16.0f, 168.0f);
-	renderHint("ESC / P: CONTINUAR     ENTER: ACEPTAR");
+	renderMenuList(items, enabled, pauseSel_, 160.0f, 94.0f, 17.0f, 168.0f);
+	renderHint("ESC / P: CONTINUAR     ENTER: ACCEPTAR");
 }
 
 void MenuSystem::renderWorldClear()
@@ -1876,17 +1954,17 @@ void MenuSystem::renderWorldClear()
 	glm::vec2 pPos(48.0f, 26.0f), pSz(224.0f, 180.0f);
 	ui_.panel(pPos, pSz, COL_PANEL_BG, COL_GOLD);
 
-	ui_.textCentered(clearGameComplete_ ? UTF8_INV_EX "JUEGO COMPLETADO!" : UTF8_INV_EX "MUNDO SUPERADO!",
+	ui_.textCentered(clearGameComplete_ ? "JOC COMPLETAT!" : "NIVELL SUPERAT!",
 	                 160.0f, 36.0f, 1.0f, COL_GOLD);
-	ui_.textCentered("VICTORIA " UTF8_STAR, 160.0f, 50.0f, 2.0f, COL_GREEN);
+	ui_.textCentered("VICT" UTF8_O_GR "RIA " UTF8_STAR, 160.0f, 50.0f, 2.0f, COL_GREEN);
 
-	ui_.textCentered("PUNTOS: " + intToStr(clearScore_) + "   TIEMPO: " + formatTime(clearTime_),
+	ui_.textCentered("PUNTS: " + intToStr(clearScore_) + "   TEMPS: " + formatTime(clearTime_),
 	                 160.0f, 76.0f, 1.0f, COL_CREAM);
 
 	if(clearUnlockedNew_)
-		ui_.textCentered(UTF8_INV_EX "MUNDO " + intToStr(clearedWorld_ + 1) + " DESBLOQUEADO!", 160.0f, 90.0f, 1.0f, COL_SKY);
+		ui_.textCentered("NIVELL " + intToStr(clearedWorld_ + 1) + " DESBLOQUEJAT!", 160.0f, 90.0f, 1.0f, COL_SKY);
 	else if(currentSlot_ >= 0)
-		ui_.textCentered("PROGRESO GUARDADO EN RANURA " + intToStr(currentSlot_ + 1), 160.0f, 90.0f, 1.0f, COL_SKY);
+		ui_.textCentered("PROGR" UTF8_E_AC "S DESAT A LA RANURA " + intToStr(currentSlot_ + 1), 160.0f, 90.0f, 1.0f, COL_SKY);
 
 	// Celebratory jumping Bomberman
 	int jumpOff = int(std::fabs(std::sin(time_ * 0.008f)) * 6.0f);
@@ -1894,10 +1972,10 @@ void MenuSystem::renderWorldClear()
 
 	std::vector<std::string> items;
 	if(clearedWorld_ < SaveSystem::instance().getWorldCount())
-		items.push_back("SIGUIENTE MUNDO");
-	items.push_back("MAPA DE MUNDOS");
-	items.push_back("REPETIR MUNDO");
-	items.push_back("MENU PRINCIPAL");
+		items.push_back("SEG" UTF8_U_UML "ENT NIVELL");
+	items.push_back("MAPA DE NIVELLS");
+	items.push_back("REPETIR NIVELL");
+	items.push_back("MEN" UTF8_U_AC " PRINCIPAL");
 	std::vector<bool> enabled(items.size(), true);
 
 	renderMenuList(items, enabled, clearSel_, 160.0f, 124.0f, 16.0f, 172.0f);
@@ -1910,16 +1988,16 @@ void MenuSystem::renderGameOver()
 	glm::vec2 pPos(52.0f, 38.0f), pSz(216.0f, 160.0f);
 	ui_.panel(pPos, pSz, COL_PANEL_BG, COL_RED);
 
-	ui_.textCentered("FIN DE PARTIDA", 160.0f, 50.0f, 2.0f, COL_RED);
-	ui_.textCentered("TE HAS QUEDADO SIN VIDAS", 160.0f, 76.0f, 1.0f, COL_CREAM);
-	ui_.textCentered("PUNTOS: " + intToStr(scene_->getScore()), 160.0f, 90.0f, 1.0f, COL_SKY);
+	ui_.textCentered("GAME OVER", 160.0f, 50.0f, 2.0f, COL_RED);
+	ui_.textCentered("T'HAS QUEDAT SENSE VIDES", 160.0f, 76.0f, 1.0f, COL_CREAM);
+	ui_.textCentered("PUNTS: " + intToStr(scene_->getScore()), 160.0f, 90.0f, 1.0f, COL_SKY);
 	ui_.rect(glm::vec2(pPos.x + 14.0f, 106.0f), glm::vec2(pSz.x - 28.0f, 1.0f), glm::vec4(1.0f, 0.34f, 0.36f, 0.4f));
 
 	std::vector<std::string> items;
-	items.push_back("REINTENTAR MUNDO");
-	items.push_back("MAPA DE MUNDOS");
-	items.push_back("CARGAR PARTIDA");
-	items.push_back("MENU PRINCIPAL");
+	items.push_back("REINTENTAR NIVELL");
+	items.push_back("MAPA DE NIVELLS");
+	items.push_back("CARREGAR PARTIDA");
+	items.push_back("MEN" UTF8_U_AC " PRINCIPAL");
 	std::vector<bool> enabled(items.size(), true);
 
 	renderMenuList(items, enabled, overSel_, 160.0f, 118.0f, 16.0f, 172.0f);

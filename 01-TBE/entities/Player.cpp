@@ -232,7 +232,8 @@ void Player::update(int deltaTime, TileMap *map)
 
 	float tSize = float(map->getBlockSize());
 	tileSize_ = tSize;
-	speed = tSize * (0.0055f + 0.0015f * float(speedUps));
+	speedUps = glm::clamp(speedUps, 0, int(MAX_SPEED_UPS));
+	speed = tSize * (0.0055f + 0.0009f * float(speedUps));
 
 	// Collision box
 	glm::vec2 colSize = getHitboxSize();
@@ -714,7 +715,7 @@ void Player::addPowerUp(int type)
 		break;
 	case 2: // SPEED_UP (Roller Skate: faster horizontal movement)
 		if(speedUps < MAX_SPEED_UPS) speedUps++;
-		speed = tileSize_ * (0.0055f + 0.0015f * float(speedUps));
+		speed = tileSize_ * (0.0055f + 0.0009f * float(speedUps));
 		break;
 	case 3: // HEART_SHIELD (Cor: 1-hit impact shield absorbing next enemy/explosion hit)
 		heartShield_ = true;
@@ -743,7 +744,7 @@ void Player::applyStats(int newLives, int newMaxBombs, int newBombRange, int new
 	bombRange = glm::clamp(newBombRange, 1, int(MAX_RANGE_CAP));
 	speedUps = glm::clamp(newSpeedUps, 0, int(MAX_SPEED_UPS));
 	heartShield_ = hasHeart;
-	speed = tileSize_ * (0.0055f + 0.0015f * float(speedUps));
+	speed = tileSize_ * (0.0055f + 0.0009f * float(speedUps));
 }
 
 void Player::syncInputLatch()

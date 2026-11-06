@@ -81,7 +81,7 @@ public:
 	static const int MAX_LIVES = 3;
 	static const int MAX_BOMBS_CAP = 8;
 	static const int MAX_RANGE_CAP = 8;
-	static const int MAX_SPEED_UPS = 4;
+	static const int MAX_SPEED_UPS = 3;
 	void applyStats(int newLives, int newMaxBombs, int newBombRange, int newSpeedUps, bool hasHeart = false);
 	void syncInputLatch();
 	void setBombPlatforms(const std::vector<glm::vec2> &platforms);

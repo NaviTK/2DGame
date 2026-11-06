@@ -752,12 +752,15 @@ void Scene::handleExplosions()
 			int bombRange = bombs[i].getRange();
 
 			bombs[i].markProcessed();
-			player.bombExploded();
 
 			Explosion *exp = explosions.acquire();
 			if(exp != NULL)
 			{
 				exp->init(bombTile, bombRange, map);
+			}
+			else
+			{
+				player.bombExploded();
 			}
 		}
 	}
@@ -991,8 +994,8 @@ void Scene::checkEntityCollisions()
 
 		if(overlapX > 0.0f && overlapY > 0.0f)
 		{
-			// With the Vest active, touching an enemy defeats it instead of hurting the player
-			if(player.hasVest())
+			// With the Vest or God Mode active, touching an enemy defeats it instead of hurting the player
+			if(player.hasVest() || player.isGodMode())
 			{
 				enemy->kill();
 				continue;
@@ -1037,7 +1040,14 @@ void Scene::spawnPowerUp(const glm::ivec2 &tilePos)
 	PowerUp *pw = powerups.acquire();
 	if(pw != NULL)
 	{
-		pw->init(tilePos, map->tileToWorld(tilePos), PowerUp::rollRandomType());
+		int pendingSkates = 0;
+		for(const auto &existing : powerups)
+		{
+			if(existing.isActive() && !existing.isCollected() && existing.getType() == SPEED_UP)
+				pendingSkates++;
+		}
+		bool allowSpeedUp = (player.getSpeedUps() + pendingSkates < Player::MAX_SPEED_UPS);
+		pw->init(tilePos, map->tileToWorld(tilePos), PowerUp::rollRandomType(allowSpeedUp));
 	}
 }
 
@@ -1046,7 +1056,10 @@ void Scene::cleanupEntities()
 	for(auto &exp : explosions)
 	{
 		if(exp.isActive() && exp.isFinished())
+		{
 			exp.deactivate();
+			player.bombExploded();
+		}
 	}
 
 	for(auto &b : bombs)
