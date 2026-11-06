@@ -1,0 +1,205 @@
+================================================================================
+                    UNIVERSITAT POLITÈCNICA DE CATALUNYA (UPC)
+                      FACULTAT D'INFORMÀTICA DE BARCELONA (FIB)
+                              VJ - VIDEOJOCS (Q1 2026/27)
+                         PROJECTE 2D: POCKET BOMBERMAN
+================================================================================
+
+1. INTEGRANTS DEL GRUP
+--------------------------------------------------------------------------------
+- Pol Sau Villanueva
+- Iván González Sánchez
+
+
+2. FUNCIONALITATS IMPLEMENTADES
+--------------------------------------------------------------------------------
+El projecte cobreix íntegrament totes les exigències de la Part Bàsica (6 punts) 
+així com els apartats avançats de Polish, Game Feel i persistència (4 punts).
+
+A) PART BÀSICA (6/6 PUNTS)
+--------------------------
+1. Estructura de Pantalles i Màquina d'Estats (MenuSystem):
+   - Pantalla de Títol ("Press Start").
+   - Menú Principal amb navegació interactiva.
+   - Submenú de Selecció de Mode / Partida.
+   - Gestor de Ranures de Guardat (Slots 1, 2 i 3).
+   - Mapa del Món interactiu d'estil Game Boy Color amb camins i nodes de nivell.
+   - Pantalla de Joc (Playing).
+   - Menú de Pausa en temps real (sense perdre l'estat del joc).
+   - Pantalla d'Instruccions / Controls.
+   - Pantalla de Crèdits de l'equip.
+   - Pantalles de Transició: Game Over i Victòria de Nivell / Món.
+
+2. Cinc Nivells Completament Jugables (level01 a level05):
+   - Món 1: El Bosc (Forest).
+   - Món 2: La Platja (Beach).
+   - Món 3: Cova de Cristall (Crystal Cave).
+   - Món 4: El Castell (Castle).
+   - Món 5: Arena del Boss Final (Gargoyle Demon Arena).
+   - Condició de victòria: per superar cada nivell cal eliminar TOTS els enemics 
+     de l'escenari, fet que obre la porta de sortida, i travessar-la.
+
+3. Control i Moviment de Bomberman (Player):
+   - Desplaçament horitzontal suau (esquerra i dreta) amb acceleració calibrada.
+   - Sistema de salt amb paràmetres de física plataformera clàssica.
+   - Mecànica de grimpada: pujar i baixar de manera vertical per lianes/escales.
+
+4. Enemics amb IA i Comportaments Diferenciats:
+   - Pink Enemy: enemic patrullador terrestre amb detecció de parets, vores i 
+     obstacles. Si col·lideix contra una bomba o un mur, inverteix el sentit.
+   - Kirby Enemy: enemic flotant / volador que patrulla rutes aèries horitzontals.
+   - Jumper Enemy: enemic saltador que realitza salts rítmics periòdics.
+   - Boss Final (Gargoyle Demon): cap gegant (32x32) situat al nivell 5, amb gran 
+     barra de resistència, patrons d'embestida ràpida i atacs aeris.
+
+5. Sistema de Vides i Derrota:
+   - El jugador comença amb 3 vides.
+   - Si un enemic o una explosió col·lideix amb en Bomberman (sense protecció de cor 
+     o armilla), es perd una vida i es reinicia la posició amb un temps d'immunitat.
+   - En perdre les 3 vides, apareix la pantalla de Game Over i es torna al menú principal.
+
+6. Sistema de Bombes:
+   - Les bombes s'alineen amb precisió a la quadrícula de rajoles (tiles).
+   - Física de gravetat a les bombes: si una bomba es col·loca en l'aire o el bloc 
+     que la sustentava es destrueix, la bomba cau fins a trobar un sòl sòlid.
+   - Temporitzador de metxa amb animació dinàmica d'estirament/contracció (squash & stretch).
+   - Avís visual previ a la detonació: parpelleig vermell durant els últims 500 ms.
+   - Detonació en creu direccional de foc (amunt, avall, esquerra, dreta) que danya 
+     enemics, destrueix blocs i pot matar al propi Bomberman si no s'allunya.
+
+7. Mecànica de "Bomb-Jump":
+   - En Bomberman pot saltar sobre les bombes que ha col·locat.
+   - Les bombes actuen com a plataformes superiors unidireccionals (one-way platforms): 
+     no bloquegen el moviment horitzontal del jugador mentre camina, però permeten 
+     recolzar-s'hi i tornar a saltar des de sobre per assolir plataformes elevades.
+
+8. Blocs Destructibles i Aparició d'Objectes:
+   - Rajoles trencables (arbustos / blocs esquerdats) distribuïdes pels mapes.
+   - En esclatar, els blocs s'eliminen i poden revelar un power-up segons taules 
+     de probabilitat definides.
+
+9. Sis Power-Ups Reals de Pocket Bomberman:
+   - Bomb Up (32%): augmenta en +1 el límit màxim de bombes simultànies (fins a 8).
+   - Fire Up (32%): augmenta en +1 el radi de les flames de les explosions (fins a 8).
+   - Speed Up (18%): augmenta la velocitat de desplaçament del Bomberman.
+   - Extra Life / Cor (9%): atorga una vida addicional.
+   - Armilla / Vest (5%): confereix 10 segons d'invencibilitat màgica arc de Sant Martí; 
+     tocar els enemics durant aquest estat els elimina a l'instant.
+   - Full Fire (4%): eleva de cop el radi d'explosió al màxim disponible.
+   * Període de gràcia anti-cremat (700 ms): l'explosió que destrueix el bloc no 
+     crema l'objecte que acaba d'aparèixer.
+
+10. Temps Límit per Nivell:
+    - Cronòmetre compte enrere visible al HUD (MM:SS).
+    - Si el temps s'esgota, el jugador perd una vida i es reinicia el nivell.
+
+11. Interfície Gràfica d'Usuari Completa (HUD):
+    - Dissenyada sobre un llenç virtual natiu retro de 320x240 amb escalat x3 nítid 
+      (filtratge GL_NEAREST a 960x720).
+    - Mostra: Vides restants (icones de cors), Temps restant (MM:SS), Enemics restants, 
+      Nombre de bombes simultànies, Radi d'explosió de foc, Puntuació actual, 
+      Barra de vida del Boss al nivell 5, i botó de Pausa [II] clicable amb ratolí.
+    - Notificacions contextuals flotants: bàmper d'entrada de nivell, missatges de 
+      power-up recollit i toasts de notificació de depuració.
+
+12. Tecles de Depuració i Correcció (Cheats):
+    - 'G': Toggle God Mode (invulnerabilitat total a danys d'enemics i bombes).
+    - 'K': Kill All Enemies (elimina a l'instant tots els enemics i obre la porta de sortida).
+    - '1', '2', '3', '4', '5': Carrega directament i automàtica el nivell 1 a 5.
+    - 'R': Reinicia el nivell actual.
+    - 'H': Activa/desactiva la visualització de les caixes de col·lisió (hitboxes).
+
+
+B) PART POLISH I AVANÇADA (4/4 PUNTS)
+-------------------------------------
+1. Interactivitat i Animacions d'Entitats:
+   - El personatge disposa d'animacions per a caminar, saltar, grimpar lianes i morir.
+   - Animacions completes dels 4 enemics (patrulla, flotació, salt i embestida del boss).
+   - Animacions direccionals de l'explosió de les bombes en 3 etapes visuals.
+   - Porta de sortida amb animació de polsació daurada quan s'obre.
+   - Power-ups amb animació flotant sinusoidal i parpelleig de gràcia.
+
+2. Game Feeling Plataformer:
+   - Jump buffering (emmagatzematge anticipat del salt abans de tocar terra).
+   - Coyote time (marge de salt després de deixar enrere una plataforma).
+   - Deformació elàstica (squash & stretch) a les bombes abans d'esclatar.
+   - Pausa dramàtica temporal en rebre danys o completar un nivell.
+
+3. Sistema de Persistència de Partides (SaveSystem):
+   - 3 ranures de guardat independents (saves/slot1.sav, slot2.sav, slot3.sav).
+   - Es desa automàticament el món assolit, les estrelles guanyades, el nombre de vides 
+     i les millores adquirides de bombes, rang i velocitat.
+   - Possibilitat d'esborrar ranures amb la tecla SUPR / 'X'.
+
+4. Doble Control Complet (Teclat i Ratolí):
+   - Tots els menús (Títol, Principal, Ranures, Mapa de Mons, Pausa, Crèdits) es 
+     poden controlar indistintament amb teclat (Fletxes / WASD + Enter / Espai) o 
+     amb el ratolí (detecció de pas per sobre / hover, clic esquerre de selecció i 
+     clic dret per tirar enrere).
+
+5. Tipografia Retro Autònoma (PixelFont):
+   - Motor de font bitmap 8x8 generat en memòria en arrencar l'aplicació, sense cap 
+     dependència externa (com FreeType).
+   - Suport complet per a caràcters catalans/castellans (Á, É, Í, Ó, Ú, Ñ, ¡, ¿) i 
+     símbols retro (icones de cors, estrelles i fletxes).
+
+6. Arquitectura i Portabilitat Multiplataforma:
+   - Compilació i execució nativa a Linux (via GCC / GNU Make).
+   - Compilació nativa a Windows (via Visual Studio C++ / MSVC amb projectes Win32 i x64).
+
+
+3. INSTRUCCIONS DEL JOC
+--------------------------------------------------------------------------------
+A) OBJECTIU
+   Acompanya en Bomberman a través de 5 mons diferents. A cada nivell hauràs 
+   d'eliminar tots els enemics col·locant bombes estratègicament i utilitzant 
+   els power-ups amagats sota els blocs destructibles. Un cop derrotats tots 
+   els enemics, la porta de sortida començarà a brillar: creua-la abans que 
+   s'esgoti el temps per avançar al següent nivell! Al nivell 5 t'enfrontaràs 
+   al Boss Final.
+
+B) CONTROLS DEL JOC (DURANT LA PARTIDA)
+   - Moure's a l'esquerra:  Fletxa Esquerra  o  tecla 'A'
+   - Moure's a la dreta:     Fletxa Dreta     o  tecla 'D'
+   - Saltar:                 Fletxa Amunt      o  tecla 'W'
+   - Pujar / Baixar lianes:  Fletxes Amunt/Avall o  tecles 'W' / 'S'
+   - Posar Bomba:            Barra Espaiadora  o  tecla 'ENTER'
+   - Pausa:                  Tecla 'ESC'       o  tecla 'P' (o clic al botó [II] del HUD)
+
+C) CONTROLS ALS MENÚS I INTERFÍCIE
+   - Navegació:              Fletxes del teclat o tecles W / A / S / D
+   - Confirmar / Acceptar:   Tecla 'ENTER' o Barra Espaiadora
+   - Retrocedir / Tornar:    Tecla 'ESC'
+   - Control amb Ratolí:     Moure el cursor sobre qualsevol opció (hover) i 
+                             fer clic esquerre per confirmar. Clic dret per tornar.
+
+D) TECLES DE DEPURACIÓ (CHEATS)
+   - 'G': Mode Déu (God Mode) - Inverteix la immunitat davant d'enemics i bombes.
+   - 'K': Eliminar enemics - Mata tots els enemics i obre la porta de sortida.
+   - '1', '2', '3', '4', '5': Salta directament al nivell seleccionat (1 a 5).
+   - 'R': Reiniciar el nivell actual.
+   - 'H': Mostrar / amagar caixes de col·lisió (hitboxes debug).
+
+E) POWER-UPS
+   - Bomb Up: Afegeix +1 bomba simultània (fins a 8).
+   - Fire Up: Afegeix +1 casella d'abast a les flames de les explosions (fins a 8).
+   - Speed Up: Augmenta la velocitat de moviment de Bomberman.
+   - Extra Life (Cor): Atorga +1 vida extra (fins a 9).
+   - Armilla (Vest): 10 segons d'invencibilitat; elimina enemics al contacte.
+   - Full Fire: Atorga immediatament la potència màxima d'explosió (rang 8).
+
+F) INSTRUCCIONS DE COMPILACIÓ I EXECUCIÓ
+   * A Linux:
+     - Requisits: g++, make, libglfw3-dev, libglew-dev, libgl1-mesa-dev.
+     - Per compilar: situar-se a la carpeta 'Projecte' i escriure:
+         make
+     - Per executar: situar-se a la carpeta 'Binari' i escriure:
+         ./01-TBE
+       o alternativament executar l'script d'arrencada:
+         ./run.sh
+
+   * A Windows:
+     - Obrir la solució 'Projecte/01-TBE.sln' a Visual Studio 2015/2017/2019/2022.
+     - Seleccionar configuració Release (o Debug) en x64 o Win32.
+     - Compilar i executar la solució (F5 o Ctrl+F5).
+================================================================================
