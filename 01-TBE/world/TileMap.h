@@ -20,6 +20,7 @@ enum TileType
 	TILE_EMPTY = 0,     // Empty cell (used on upper layers 1 and 2 when nothing is drawn there)
 	TILE_SKY,           // Walkable background/sky tile
 	TILE_SOLID,         // Solid ground, wall, or platform block (blocks movement on all sides)
+	TILE_ONE_WAY,       // Indestructible jump-through platform (supports from above)
 	TILE_DESTRUCTIBLE,  // Destructible grass/bush block (one-way platform from above, destroyed by bombs)
 	TILE_VINE_HEAD,     // Vine source block (one-way platform from above, toggles vine when hit by bomb)
 	TILE_VINE_STEM,     // Climbable vine stem tile
@@ -132,11 +133,13 @@ private:
 	TileCell *map3D_;
 	int defaultSkySprite_;
 	bool zeroIndexedTiles_;
+	bool isNewTileset_;
 
 	// Dynamic vine groups
 	struct VineGroup
 	{
 		glm::ivec2 headPos;
+		int stemLayer;
 		vector<glm::ivec2> stemPositions;
 		vector<TileCell> stemCells;
 		bool expanded;

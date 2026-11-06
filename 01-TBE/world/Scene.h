@@ -15,6 +15,7 @@
 #include "Explosion.h"
 #include "PowerUp.h"
 #include "ObjectPool.h"
+#include "SaveSystem.h"
 
 
 using namespace std;
@@ -33,6 +34,7 @@ using namespace std;
 // It is responsible for updating and rendering them, and for
 // handling the game logic (bomb placement, explosions, collisions,
 // power-up collection, win/lose conditions).
+// Menus, pause and HUD are handled by Game / MenuSystem on top of the Scene.
 class Scene
 {
 
@@ -41,12 +43,27 @@ public:
 	~Scene();
 
 	void init();
-	void loadLevel(int levelIndex);
+	void loadLevel(int levelIndex, bool preservePlayerStats = false);
 	void update(int deltaTime);
 	void render();
 
 	bool isGameOver() const;
 	bool isWin() const;
+	int getCurrentLevel() const { return currentLevel; }
+	const Player &getPlayer() const { return player; }
+	ShaderProgram &getTexProgram() { return texProgram; }
+	ShaderProgram &getSimpleProgram() { return simpleProgram; }
+	float getElapsedTime() const { return currentTime; }
+	int getEnemiesRemaining() const;
+	int getScore() const { return score; }
+	bool levelHasExitDoor() const { return hasExitDoor_; }
+	bool isPlayerOnExitDoor() const;
+
+	void applySaveData(const SaveSlotData &data);
+	void exportSaveData(SaveSlotData &data) const;
+	void syncPlayerInputLatch();
+	bool consumeWorldClearedEvent(int &outClearedWorld);
+	bool consumePickedPowerUp(PowerUpType &outType);
 
 private:
 	void initShaders();
@@ -71,7 +88,7 @@ private:
 	glm::vec2 cameraCenter;
 	glm::vec2 cameraViewSize;
 	int currentLevel;
-	bool prevKey1, prevKey2, prevKeyR, prevKeyH;
+	bool prevKeyH;
 	bool showHitboxes; // Toggled with the 'H' key to show/hide debug collision boxes
 
 	// Entities (pre-allocated in contiguous fixed-capacity Object Pools per enemy type)
@@ -89,6 +106,16 @@ private:
 	GLint quadPosLocation;
 
 	bool gameOver, win;
+	bool worldClearedPending_;
+	int lastClearedWorld_;
+	bool powerUpPickedPending_;
+	PowerUpType lastPickedPowerUp_;
+	bool hasExitDoor_;
+	bool levelEnding_;     // Player died or cleared the level; short delay before the result screen
+	bool endingIsWin_;
+	float endTimer_;
+	int score;
+	vector<bool> enemyCounted_; // Tracks which enemies already granted score
 
 };
 

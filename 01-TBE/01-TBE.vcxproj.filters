@@ -16,11 +16,20 @@
     <Filter Include="entities\enemies">
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A205}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ui">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A206}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="core\Game.cpp">
       <Filter>core</Filter>
+    </ClCompile>
+    <ClCompile Include="core\SaveSystem.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
+    <ClCompile Include="graphics\PixelFont.cpp">
+      <Filter>graphics</Filter>
     </ClCompile>
     <ClCompile Include="graphics\Shader.cpp">
       <Filter>graphics</Filter>
@@ -33,6 +42,12 @@
     </ClCompile>
     <ClCompile Include="graphics\Texture.cpp">
       <Filter>graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\UIRenderer.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\MenuSystem.cpp">
+      <Filter>ui</Filter>
     </ClCompile>
     <ClCompile Include="world\Scene.cpp">
       <Filter>world</Filter>
@@ -69,6 +84,12 @@
     <ClInclude Include="core\ObjectPool.h">
       <Filter>core</Filter>
     </ClInclude>
+    <ClInclude Include="core\SaveSystem.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="graphics\PixelFont.h">
+      <Filter>graphics</Filter>
+    </ClInclude>
     <ClInclude Include="graphics\Shader.h">
       <Filter>graphics</Filter>
     </ClInclude>
@@ -80,6 +101,12 @@
     </ClInclude>
     <ClInclude Include="graphics\Texture.h">
       <Filter>graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="ui\UIRenderer.h">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="ui\MenuSystem.h">
+      <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="world\Scene.h">
       <Filter>world</Filter>
@@ -108,5 +135,8 @@
     <ClInclude Include="entities\enemies\KirbyEnemy.h">
       <Filter>entities\enemies</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="levels\level03.txt" />
   </ItemGroup>
 </Project>

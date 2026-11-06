@@ -1,8 +1,10 @@
 #include <GL/glew.h>
+#include <cmath>
 #include <glm/gtc/matrix_transform.hpp>
 #include "Bomb.h"
 #include "Texture.h"
 #include "ShaderProgram.h"
+#include "TileMap.h"
 
 
 static const float BOMB_SHEET_W = 253.0f;
@@ -70,10 +72,12 @@ Bomb::Bomb()
 	pos = glm::vec2(0.0f);
 	tilePos_ = glm::ivec2(0);
 	timer = 3000.0f; // 3 seconds total fuse countdown
+	velY_ = 0.0f;
 	range = 3;
 	active = false;
 	exploded = false;
 	processed = false;
+	grounded_ = true;
 }
 
 void Bomb::init(const glm::ivec2 &tilePos, const glm::vec2 &worldPos, int bombRange)
@@ -82,12 +86,24 @@ void Bomb::init(const glm::ivec2 &tilePos, const glm::vec2 &worldPos, int bombRa
 	pos = worldPos;
 	range = bombRange;
 	timer = 3000.0f; // 3 seconds: changes sprite every 1 second
+	velY_ = 0.0f;
 	active = true;
 	exploded = false;
 	processed = false;
+	grounded_ = false; // Resolved on the first update (falls if placed in mid-air)
 }
 
-void Bomb::update(int deltaTime)
+bool Bomb::isSupportTile(TileMap *map, int x, int y) const
+{
+	if(y >= map->getMapHeight())
+		return true;
+	if(y < 0 || x < 0 || x >= map->getMapWidth())
+		return false;
+	// Solid blocks and one-way platforms (grass, vine heads) hold the bomb up
+	return !map->isWalkable(x, y) || map->isOneWayPlatform(x, y);
+}
+
+void Bomb::update(int deltaTime, TileMap *map)
 {
 	if(!active || exploded)
 		return;
@@ -97,7 +113,46 @@ void Bomb::update(int deltaTime)
 	{
 		timer = 0.0f;
 		exploded = true;
+		return;
 	}
+
+	if(map == NULL)
+		return;
+
+	float tSize = float(map->getBlockSize());
+	float minY = map->getMinCoords().y;
+
+	if(grounded_)
+	{
+		// Start falling if the supporting block was destroyed by an explosion
+		if(!isSupportTile(map, tilePos_.x, tilePos_.y + 1))
+			grounded_ = false;
+		return;
+	}
+
+	int dt = (deltaTime > 40) ? 40 : deltaTime;
+	velY_ += tSize * 0.000042f * float(dt);
+	float maxFall = tSize * 0.018f;
+	if(velY_ > maxFall)
+		velY_ = maxFall;
+
+	float newY = pos.y + velY_ * float(dt);
+	int rowBelowOld = int(std::floor((pos.y + tSize - minY) / tSize + 0.0001f));
+	int rowBelowNew = int(std::floor((newY + tSize - minY) / tSize));
+
+	for(int r = rowBelowOld; r <= rowBelowNew; r++)
+	{
+		if(isSupportTile(map, tilePos_.x, r))
+		{
+			newY = minY + float(r - 1) * tSize;
+			velY_ = 0.0f;
+			grounded_ = true;
+			break;
+		}
+	}
+
+	pos.y = newY;
+	tilePos_.y = int(std::floor((pos.y + tSize * 0.5f - minY) / tSize));
 }
 
 int Bomb::getAnimStage() const
@@ -123,7 +178,19 @@ void Bomb::render(ShaderProgram &texProgram, float tileSize) const
 	//   Stage 2: x = 92, y = 51
 	static const int BOMB_SRC_X[3] = { 57, 75, 92 };
 	int stage = getAnimStage();
-	drawSheetRect(texProgram, pos, glm::vec2(tileSize, tileSize), BOMB_SRC_X[stage], 51, 16, 16);
+
+	// Classic Bomberman "breathing" pulse that speeds up as the fuse burns down
+	float pulseSpeed = 0.006f + 0.006f * float(stage);
+	float pulse = 1.0f + 0.07f * std::sin((3000.0f - timer) * pulseSpeed);
+	glm::vec2 size(tileSize * pulse, tileSize * (2.0f - pulse));
+	glm::vec2 drawPos(pos.x + (tileSize - size.x) * 0.5f, pos.y + tileSize - size.y);
+
+	// Flash red during the last half second
+	if(timer < 500.0f && (int(timer / 60.0f) % 2) == 0)
+		texProgram.setUniform4f("color", 1.6f, 0.6f, 0.6f, 1.0f);
+
+	drawSheetRect(texProgram, drawPos, size, BOMB_SRC_X[stage], 51, 16, 16);
+	texProgram.setUniform4f("color", 1.0f, 1.0f, 1.0f, 1.0f);
 }
 
 glm::vec2 Bomb::getPosition() const

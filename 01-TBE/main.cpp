@@ -27,6 +27,11 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		Game::instance().mouseRelease(button);
 }
 
+void window_size_callback(GLFWwindow* window, int width, int height)
+{
+	Game::instance().windowResized(width, height);
+}
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
 	if (width > 0 && height > 0)
@@ -42,6 +47,9 @@ int main(void)
 	/* Initialize the library */
 	if (!glfwInit())
 		return -1;
+
+	/* Block window resizing */
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 	/* Create a windowed mode window and its OpenGL context */
 	window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Pocket Bomberman", NULL, NULL);
@@ -60,6 +68,7 @@ int main(void)
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetCursorPosCallback(window, cursor_position_callback);
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
+	glfwSetWindowSizeCallback(window, window_size_callback);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
 	/* Init glew to have access to GL extensions */
@@ -71,6 +80,10 @@ int main(void)
 	glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
 	if (fbWidth > 0 && fbHeight > 0)
 		glViewport(0, 0, fbWidth, fbHeight);
+
+	int winW = SCREEN_WIDTH, winH = SCREEN_HEIGHT;
+	glfwGetWindowSize(window, &winW, &winH);
+	Game::instance().windowResized(winW, winH);
 
 	/* Init step of the game loop */
 	Game::instance().init();

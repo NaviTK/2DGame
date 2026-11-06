@@ -15,7 +15,7 @@ using namespace std;
 static string toUpperStr(string s)
 {
 	for(size_t i = 0; i < s.size(); i++)
-		s[i] = char(std::toupper(unsigned char(s[i])));
+		s[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(s[i])));
 	return s;
 }
 
@@ -33,6 +33,7 @@ TileMap::TileMap(const string &levelFile, const glm::vec2 &minCoords, ShaderProg
 	map3D_ = NULL;
 	defaultSkySprite_ = 17;
 	zeroIndexedTiles_ = false;
+	isNewTileset_ = false;
 	minCoords_ = minCoords;
 	shaderProgram_ = &program;
 	loadLevel(levelFile);
@@ -89,6 +90,41 @@ TileType TileMap::classifySpriteId(int t) const
 		if(t == 2)
 			return TILE_DESTRUCTIBLE;
 		return TILE_SOLID;
+	}
+
+	// Semantic classification for images/tileset_nuevo.png (384x256, 12x8 grid of 32x32 tiles)
+	if(isNewTileset_)
+	{
+		// 1. Exit doors (Forest wooden arch, Ruins golden arch, Cave portal)
+		if(t == 11 || t == 35 || t == 59)
+			return TILE_EXIT_DOOR;
+
+		// 2. Vine / ladder / pipe source blocks (one-way platform on top + toggleable stem below)
+		if(t == 10 || t == 34 || t == 58)
+			return TILE_VINE_HEAD;
+
+		// 3. Climbable vine, wooden ladder, and pipe stem segments
+		if(t == 17 || t == 18 || t == 41 || t == 42 || t == 65 || t == 66)
+			return TILE_VINE_STEM;
+
+		// 4. Destructible blocks (berry bush, crates, cracked stone, amphora, ice crystal)
+		if(t == 8 || t == 9 || t == 32 || t == 33 || t == 56 || t == 57)
+			return TILE_DESTRUCTIBLE;
+
+		// 5. Indestructible thin jump-through platforms (wooden, sandstone, metal ledges)
+		if((t >= 5 && t <= 7) || (t >= 29 && t <= 31) || (t >= 53 && t <= 55))
+			return TILE_ONE_WAY;
+
+		// 6. Solid terrain, walls, outer jeweled border frame, sand, bomb block, and stone bridge
+		if((t >= 0 && t <= 4) || (t >= 12 && t <= 16) ||
+		   (t >= 24 && t <= 28) || (t >= 36 && t <= 39) ||
+		   (t >= 48 && t <= 52) || (t >= 60 && t <= 64) ||
+		   (t >= 72 && t <= 79) ||
+		   (t >= 84 && t <= 86) || (t >= 92 && t <= 95))
+			return TILE_SOLID;
+
+		// 7. Sky, clouds, canopy, ruin bricks/torches, columns, water, and decorative props
+		return TILE_SKY;
 	}
 
 	// 1. Exit door tile
@@ -180,12 +216,12 @@ bool TileMap::loadLevel(const string &levelFile)
 	tilesheetSize = glm::ivec2(16, 16);
 	string tilesheetFile = "images/tilesetworld.png";
 
-	vector<string> tileDataLines;
-	bool readingTilesSection = false;
+	vector<string> layerDataLines[NUM_LAYERS];
+	int activeLayerSection = -1;
 	int legacyHeaderStep = 0;
 
 	// Parse self-documenting tags (MAP_SIZE, TILE_SIZE, TILESHEET, TILESHEET_GRID,
-	// TILES / LAYER_0, PLAYER_SPAWN, ENEMY_SPAWN) as well as legacy positional lines.
+	// TILES / LAYER_0 / LAYER_1 / LAYER_2, PLAYER_SPAWN, ENEMY_SPAWN) as well as legacy positional lines.
 	for(size_t idx = 0; idx < lines.size(); idx++)
 	{
 		stringstream ss(lines[idx]);
@@ -195,13 +231,13 @@ bool TileMap::loadLevel(const string &levelFile)
 
 		if(upperToken == "TILEMAP")
 		{
-			readingTilesSection = false;
+			activeLayerSection = -1;
 			continue;
 		}
 		else if(upperToken == "MAP_SIZE")
 		{
 			ss >> mapSize.x >> mapSize.y;
-			readingTilesSection = false;
+			activeLayerSection = -1;
 			continue;
 		}
 		else if(upperToken == "TILE_SIZE")
@@ -209,25 +245,35 @@ bool TileMap::loadLevel(const string &levelFile)
 			ss >> tileSize >> blockSize;
 			if(tileSize < blockSize)
 				std::swap(tileSize, blockSize);
-			readingTilesSection = false;
+			activeLayerSection = -1;
 			continue;
 		}
 		else if(upperToken == "TILESHEET")
 		{
 			ss >> tilesheetFile;
-			readingTilesSection = false;
+			activeLayerSection = -1;
 			continue;
 		}
 		else if(upperToken == "TILESHEET_GRID" || upperToken == "TILESHEET_SIZE")
 		{
 			ss >> tilesheetSize.x >> tilesheetSize.y;
-			readingTilesSection = false;
+			activeLayerSection = -1;
 			continue;
 		}
 		else if(upperToken == "TILES" || upperToken == "TILES:" ||
 		        upperToken == "LAYER_0" || upperToken == "LAYER_0:")
 		{
-			readingTilesSection = true;
+			activeLayerSection = 0;
+			continue;
+		}
+		else if(upperToken == "LAYER_1" || upperToken == "LAYER_1:")
+		{
+			activeLayerSection = 1;
+			continue;
+		}
+		else if(upperToken == "LAYER_2" || upperToken == "LAYER_2:")
+		{
+			activeLayerSection = 2;
 			continue;
 		}
 		else if(upperToken == "PLAYER_SPAWN")
@@ -235,7 +281,7 @@ bool TileMap::loadLevel(const string &levelFile)
 			int px = 1, py = 1;
 			if(ss >> px >> py)
 				playerSpawns_.push_back(glm::ivec2(px, py));
-			readingTilesSection = false;
+			activeLayerSection = -1;
 			continue;
 		}
 		else if(upperToken == "ENEMY_SPAWN")
@@ -249,15 +295,15 @@ bool TileMap::loadLevel(const string &levelFile)
 				info.tilePos = glm::ivec2(ex, ey);
 				enemySpawns_.push_back(info);
 			}
-			readingTilesSection = false;
+			activeLayerSection = -1;
 			continue;
 		}
 
-		// If currently inside TILES section and we still need rows, collect this row
-		if(readingTilesSection)
+		// If currently inside a layer section and we still need rows, collect this row
+		if(activeLayerSection >= 0 && activeLayerSection < NUM_LAYERS)
 		{
-			if(int(tileDataLines.size()) < mapSize.y)
-				tileDataLines.push_back(lines[idx]);
+			if(int(layerDataLines[activeLayerSection].size()) < mapSize.y)
+				layerDataLines[activeLayerSection].push_back(lines[idx]);
 			continue;
 		}
 
@@ -287,9 +333,13 @@ bool TileMap::loadLevel(const string &levelFile)
 			stringstream lss(lines[idx]);
 			lss >> tilesheetSize.x >> tilesheetSize.y;
 			legacyHeaderStep++;
-			readingTilesSection = true;
+			activeLayerSection = 0;
 		}
 	}
+
+	string upperSheet = toUpperStr(tilesheetFile);
+	isNewTileset_ = (upperSheet.find("TILESET_NUEVO") != string::npos);
+	defaultSkySprite_ = isNewTileset_ ? 19 : 17;
 
 	tilesheet.loadFromFile(tilesheetFile, TEXTURE_PIXEL_FORMAT_RGBA);
 	tilesheet.setWrapS(GL_CLAMP_TO_EDGE);
@@ -331,49 +381,78 @@ bool TileMap::loadLevel(const string &levelFile)
 
 	vertices_.reserve(std::size_t(NUM_LAYERS * mapSize.x * mapSize.y * 24));
 
-	// Populate Layer 0 from the tile matrix rows
-	for(int j = 0; j < mapSize.y; j++)
+	bool hasUpperLayers = !layerDataLines[1].empty() || !layerDataLines[2].empty();
+
+	// Populate Layers 0..2 from the parsed tile matrices
+	for(int layer = 0; layer < NUM_LAYERS; layer++)
 	{
-		string dataLine = (j < int(tileDataLines.size())) ? tileDataLines[j] : "";
-		stringstream lineStream(dataLine);
-		string token;
-		for(int i = 0; i < mapSize.x; i++)
+		if(layer > 0 && layerDataLines[layer].empty())
+			continue;
+
+		for(int j = 0; j < mapSize.y; j++)
 		{
-			int t = -1;
-			if(lineStream >> token)
+			string dataLine = (j < int(layerDataLines[layer].size())) ? layerDataLines[layer][j] : "";
+			stringstream lineStream(dataLine);
+			string token;
+			for(int i = 0; i < mapSize.x; i++)
 			{
-				if(token == ".")
-					t = -1;
-				else
-					t = atoi(token.c_str());
-			}
-			if(!zeroIndexedTiles_)
-			{
-				if(t == 3)
+				int t = -1;
+				if(lineStream >> token)
 				{
-					playerSpawns_.push_back(glm::ivec2(i, j));
-					t = -1;
+					if(token == ".")
+						t = -1;
+					else
+						t = atoi(token.c_str());
 				}
-				else if(t == 4)
+				if(layer == 0 && !zeroIndexedTiles_)
 				{
-					EnemySpawnInfo info;
-					info.type = "PINK";
-					info.tilePos = glm::ivec2(i, j);
-					enemySpawns_.push_back(info);
-					t = -1;
+					if(t == 3)
+					{
+						playerSpawns_.push_back(glm::ivec2(i, j));
+						t = -1;
+					}
+					else if(t == 4)
+					{
+						EnemySpawnInfo info;
+						info.type = "PINK";
+						info.tilePos = glm::ivec2(i, j);
+						enemySpawns_.push_back(info);
+						t = -1;
+					}
 				}
+
+				TileType cellType = classifySpriteId(t);
+				if(layer == 0 && cellType == TILE_SKY && t >= 0)
+				{
+					if(!isNewTileset_ || t == 19 || t == 43 || t == 67)
+						defaultSkySprite_ = t;
+				}
+
+				setCell(layer, i, j, t, cellType);
 			}
-
-			TileType cellType = classifySpriteId(t);
-			if(cellType == TILE_SKY && t >= 0)
-				defaultSkySprite_ = t;
-
-			setCell(0, i, j, t, cellType);
 		}
 	}
 
-	// Scan initial level layout for vine source blocks (TILE_VINE_HEAD) and record
-	// the contiguous chain of vine stem cells (TILE_VINE_STEM) and their orientation.
+	// Single-layer convenience for tileset_nuevo.png: automatically back cutout tiles with sky on Layer 0
+	if(isNewTileset_ && !hasUpperLayers)
+	{
+		for(int j = 0; j < mapSize.y; j++)
+		{
+			for(int i = 0; i < mapSize.x; i++)
+			{
+				TileCell c0 = getCell(0, i, j);
+				bool isOpaqueFrame = (c0.spriteId >= 72 && c0.spriteId <= 79);
+				if(c0.spriteId >= 0 && c0.type != TILE_SKY && !isOpaqueFrame)
+				{
+					setCell(0, i, j, defaultSkySprite_, TILE_SKY);
+					setCell(1, i, j, c0.spriteId, c0.type);
+				}
+			}
+		}
+	}
+
+	// Scan initial level layout for vine/ladder source blocks (TILE_VINE_HEAD) and record
+	// the contiguous chain of stem cells (TILE_VINE_STEM), their layer, and their orientation.
 	const glm::ivec2 dirs[4] = {
 		glm::ivec2(0, 1),   // DOWN
 		glm::ivec2(0, -1),  // UP
@@ -389,6 +468,7 @@ bool TileMap::loadLevel(const string &levelFile)
 			{
 				VineGroup vg;
 				vg.headPos = glm::ivec2(x, y);
+				vg.stemLayer = 0;
 				vg.expanded = true;
 
 				for(int d = 0; d < 4 && vg.stemPositions.empty(); d++)
@@ -397,8 +477,19 @@ bool TileMap::loadLevel(const string &levelFile)
 					while(cur.x >= 0 && cur.x < mapSize.x && cur.y >= 0 && cur.y < mapSize.y &&
 					      hasTileType(cur.x, cur.y, TILE_VINE_STEM))
 					{
+						int foundLayer = 0;
+						for(int sl = NUM_LAYERS - 1; sl >= 0; sl--)
+						{
+							if(getCell(sl, cur.x, cur.y).type == TILE_VINE_STEM)
+							{
+								foundLayer = sl;
+								break;
+							}
+						}
+						if(vg.stemPositions.empty())
+							vg.stemLayer = foundLayer;
 						vg.stemPositions.push_back(cur);
-						vg.stemCells.push_back(getCell(0, cur.x, cur.y));
+						vg.stemCells.push_back(getCell(foundLayer, cur.x, cur.y));
 						cur += dirs[d];
 					}
 				}
@@ -465,7 +556,8 @@ void TileMap::prepareArrays(const glm::vec2 &minCoords, ShaderProgram &program)
 	vertices_.clear();
 
 	nTiles = 0;
-	halfTexel = glm::vec2(0.5f / tilesheet.width(), 0.5f / tilesheet.height());
+	float insetPx = isNewTileset_ ? 0.002f : 0.5f;
+	halfTexel = glm::vec2(insetPx / tilesheet.width(), insetPx / tilesheet.height());
 
 	// Render the 3D tile matrix in strict layer order: Layer 0 first, then Layer 1, then Layer 2
 	for(int layer = 0; layer < NUM_LAYERS; layer++)
@@ -590,7 +682,11 @@ bool TileMap::isOneWayPlatform(int x, int y) const
 {
 	if(x < 0 || x >= mapSize.x || y < 0 || y >= mapSize.y)
 		return false;
-	return hasTileType(x, y, TILE_DESTRUCTIBLE) || hasTileType(x, y, TILE_VINE_HEAD);
+	if(hasTileType(x, y, TILE_SOLID))
+		return false;
+	return hasTileType(x, y, TILE_ONE_WAY) ||
+	       hasTileType(x, y, TILE_DESTRUCTIBLE) ||
+	       hasTileType(x, y, TILE_VINE_HEAD);
 }
 
 bool TileMap::isClimbable(int x, int y) const
@@ -696,7 +792,7 @@ void TileMap::update(int deltaTime)
 			{
 				glm::ivec2 pos = vg.stemPositions[vg.visibleCount];
 				const TileCell &stemCell = vg.stemCells[vg.visibleCount];
-				setCell(0, pos.x, pos.y, stemCell.spriteId, stemCell.type);
+				setCell(vg.stemLayer, pos.x, pos.y, stemCell.spriteId, stemCell.type);
 				vg.visibleCount++;
 				changed = true;
 			}
@@ -704,7 +800,10 @@ void TileMap::update(int deltaTime)
 			{
 				vg.visibleCount--;
 				glm::ivec2 pos = vg.stemPositions[vg.visibleCount];
-				setCell(0, pos.x, pos.y, defaultSkySprite_, TILE_SKY);
+				if(vg.stemLayer == 0)
+					setCell(0, pos.x, pos.y, defaultSkySprite_, TILE_SKY);
+				else
+					setCell(vg.stemLayer, pos.x, pos.y, -1, TILE_EMPTY);
 				changed = true;
 			}
 		}

@@ -12,6 +12,13 @@
 using namespace std;
 
 
+static const float DEATH_DELAY_MS = 1400.0f; // Time to show the defeated player before GAME OVER
+static const float CLEAR_DELAY_MS = 900.0f;  // Short celebration before the WORLD CLEAR screen
+static const int   SCORE_ENEMY    = 100;
+static const int   SCORE_BLOCK    = 10;
+static const int   SCORE_POWERUP  = 50;
+
+
 Scene::Scene()
 {
 	map = NULL;
@@ -23,11 +30,17 @@ Scene::Scene()
 	cameraCenter = glm::vec2(0.0f);
 	cameraViewSize = glm::vec2(160.0f, 120.0f);
 	currentLevel = 1;
-	prevKey1 = false;
-	prevKey2 = false;
-	prevKeyR = false;
 	prevKeyH = false;
 	showHitboxes = false;
+	worldClearedPending_ = false;
+	lastClearedWorld_ = 0;
+	powerUpPickedPending_ = false;
+	lastPickedPowerUp_ = EXTRA_BOMB;
+	hasExitDoor_ = false;
+	levelEnding_ = false;
+	endingIsWin_ = false;
+	endTimer_ = 0.0f;
+	score = 0;
 	activeEnemies.reserve(MAX_ENEMIES * 2);
 }
 
@@ -48,18 +61,30 @@ void Scene::init()
 	loadLevel(1);
 }
 
-void Scene::loadLevel(int levelIndex)
+void Scene::loadLevel(int levelIndex, bool preservePlayerStats)
 {
+	int savedLives = player.getLives();
+	int savedMaxBombs = player.getMaxBombs();
+	int savedBombRange = player.getBombRange();
+	int savedSpeedUps = player.getSpeedUps();
+	bool hadAlivePlayer = preservePlayerStats && player.isAlive();
 	currentLevel = levelIndex;
 	currentTime = 0.0f;
 	gameOver = false;
 	win = false;
+	worldClearedPending_ = false;
+	powerUpPickedPending_ = false;
+	levelEnding_ = false;
+	endingIsWin_ = false;
+	endTimer_ = 0.0f;
+	score = 0;
 	bombs.releaseAll();
 	explosions.releaseAll();
 	powerups.releaseAll();
 	pinkEnemies.releaseAll();
 	kirbyEnemies.releaseAll();
 	activeEnemies.clear();
+	enemyCounted_.clear();
 
 	if(map != NULL)
 	{
@@ -67,16 +92,28 @@ void Scene::loadLevel(int levelIndex)
 		map = NULL;
 	}
 
-	string levelFile = (levelIndex == 2) ? "levels/level02.txt" : "levels/level01.txt";
+	const WorldDef *wDef = SaveSystem::instance().getWorldById(levelIndex);
+	string levelFile = (wDef != NULL) ? wDef->levelFile : ((levelIndex == 3) ? "levels/level03.txt" : ((levelIndex == 2) ? "levels/level02.txt" : "levels/level01.txt"));
 	map = TileMap::createTileMap(levelFile, glm::vec2(0.0f), texProgram);
 
 	float tSize = float(map->getBlockSize());
+
+	// Worlds with an exit door are cleared by reaching it after defeating every enemy;
+	// arena worlds without a door are cleared as soon as every enemy is defeated.
+	hasExitDoor_ = false;
+	for(int j = 0; j < map->getMapHeight() && !hasExitDoor_; j++)
+		for(int i = 0; i < map->getMapWidth() && !hasExitDoor_; i++)
+			if(map->isExitDoor(i, j))
+				hasExitDoor_ = true;
 
 	if(!map->getPlayerSpawns().empty())
 		player.init(map->tileToWorld(map->getPlayerSpawns()[0]), tSize);
 	else
 		player.init(map->tileToWorld(glm::ivec2(1, 1)), tSize);
 	player.initSprite(texProgram);
+	if(hadAlivePlayer)
+		player.applyStats(savedLives, savedMaxBombs, savedBombRange, savedSpeedUps);
+	player.syncInputLatch();
 
 	// Spawn enemies from the level configuration tags (ENEMY_SPAWN <TYPE> <x> <y>)
 	for(const auto &spawn : map->getEnemySpawns())
@@ -92,6 +129,7 @@ void Scene::loadLevel(int levelIndex)
 			enemy->init(map->tileToWorld(spawn.tilePos), tSize);
 			enemy->initSprite(texProgram);
 			activeEnemies.push_back(enemy);
+			enemyCounted_.push_back(false);
 		}
 	}
 
@@ -148,19 +186,6 @@ void Scene::updateCamera(int deltaTime, bool instant)
 
 void Scene::update(int deltaTime)
 {
-	currentTime += float(deltaTime);
-
-	// Level switching shortcuts: '1' -> level01, '2' -> level02, 'R' -> restart current level
-	bool k1 = Game::instance().getKey(GLFW_KEY_1);
-	bool k2 = Game::instance().getKey(GLFW_KEY_2);
-	bool kR = Game::instance().getKey(GLFW_KEY_R);
-	if(k1 && !prevKey1) loadLevel(1);
-	if(k2 && !prevKey2) loadLevel(2);
-	if(kR && !prevKeyR) loadLevel(currentLevel);
-	prevKey1 = k1;
-	prevKey2 = k2;
-	prevKeyR = kR;
-
 	// 'H' toggles the debug hitbox overlay (works even on game over / win screens)
 	bool kH = Game::instance().getKey(GLFW_KEY_H);
 	if(kH && !prevKeyH)
@@ -170,8 +195,44 @@ void Scene::update(int deltaTime)
 	if(gameOver || win)
 		return;
 
+	// Short delay after dying / clearing so the player can see what happened
+	if(levelEnding_)
+	{
+		endTimer_ -= float(deltaTime);
+		for(auto &exp : explosions)
+			if(exp.isActive())
+				exp.update(deltaTime);
+		cleanupEntities();
+		if(endTimer_ <= 0.0f)
+		{
+			if(endingIsWin_)
+			{
+				win = true;
+				worldClearedPending_ = true;
+				lastClearedWorld_ = currentLevel;
+			}
+			else
+			{
+				gameOver = true;
+			}
+		}
+		return;
+	}
+
+	currentTime += float(deltaTime);
+
 	if(map != NULL)
 		map->update(deltaTime);
+
+	// Feed active bomb positions so the player can stand/bomb-jump on placed bombs
+	static vector<glm::vec2> activeBombPositions;
+	activeBombPositions.clear();
+	for(size_t i = 0; i < bombs.capacity(); i++)
+	{
+		if(bombs[i].isActive() && !bombs[i].hasExploded())
+			activeBombPositions.push_back(bombs[i].getPosition());
+	}
+	player.setBombPlatforms(activeBombPositions);
 
 	player.update(deltaTime, map);
 
@@ -191,13 +252,19 @@ void Scene::update(int deltaTime)
 	for(size_t i = 0; i < bombs.capacity(); i++)
 	{
 		if(bombs[i].isActive())
-			bombs[i].update(deltaTime);
+			bombs[i].update(deltaTime, map);
 	}
 
 	for(size_t i = 0; i < explosions.capacity(); i++)
 	{
 		if(explosions[i].isActive())
 			explosions[i].update(deltaTime);
+	}
+
+	for(size_t i = 0; i < powerups.capacity(); i++)
+	{
+		if(powerups[i].isActive())
+			powerups[i].update(deltaTime);
 	}
 
 	handleBombPlacement();
@@ -207,30 +274,59 @@ void Scene::update(int deltaTime)
 	cleanupEntities();
 	updateCamera(deltaTime, false);
 
+	// Award score for enemies defeated this frame
 	bool allEnemiesCleared = true;
 	for(size_t i = 0; i < activeEnemies.size(); i++)
 	{
 		if(activeEnemies[i]->isAlive())
 		{
 			allEnemiesCleared = false;
-			break;
+		}
+		else if(i < enemyCounted_.size() && !enemyCounted_[i])
+		{
+			enemyCounted_[i] = true;
+			score += SCORE_ENEMY;
 		}
 	}
 
-	// Also allow reaching the exit door (TILE_EXIT_DOOR) to advance from level 1 to level 2
-	glm::ivec2 pTile = player.getTilePosition(map);
-	if(map->isExitDoor(pTile.x, pTile.y) && allEnemiesCleared)
+	if(!player.isAlive())
 	{
-		if(currentLevel == 1)
-			loadLevel(2);
-		else
-			win = true;
+		levelEnding_ = true;
+		endingIsWin_ = false;
+		endTimer_ = DEATH_DELAY_MS;
+		return;
 	}
 
-	if(!player.isAlive())
-		gameOver = true;
-	else if(allEnemiesCleared && currentLevel == 2)
-		win = true;
+	// World clear conditions
+	bool cleared = false;
+	if(hasExitDoor_)
+		cleared = allEnemiesCleared && isPlayerOnExitDoor();
+	else
+		cleared = allEnemiesCleared;
+
+	if(cleared)
+	{
+		levelEnding_ = true;
+		endingIsWin_ = true;
+		endTimer_ = CLEAR_DELAY_MS;
+	}
+}
+
+bool Scene::isPlayerOnExitDoor() const
+{
+	if(map == NULL)
+		return false;
+	glm::ivec2 pTile = player.getTilePosition(map);
+	return map->isExitDoor(pTile.x, pTile.y);
+}
+
+int Scene::getEnemiesRemaining() const
+{
+	int count = 0;
+	for(size_t i = 0; i < activeEnemies.size(); i++)
+		if(activeEnemies[i]->isAlive())
+			count++;
+	return count;
 }
 
 void Scene::render()
@@ -246,26 +342,27 @@ void Scene::render()
 
 	float tSize = float(map->getBlockSize());
 
-	// 2. Render power-ups (centered in tile)
+	// 1b. Subtle golden pulse on the exit door once all enemies have been defeated
+	if(hasExitDoor_ && getEnemiesRemaining() == 0)
+	{
+		float alpha = 0.22f + 0.16f * std::sin(currentTime * 0.008f);
+		for(int j = 0; j < map->getMapHeight(); j++)
+		{
+			for(int i = 0; i < map->getMapWidth(); i++)
+			{
+				if(map->isExitDoor(i, j))
+					renderQuad(map->tileToWorld(glm::ivec2(i, j)), glm::vec2(tSize, tSize), glm::vec4(1.0f, 0.92f, 0.25f, alpha));
+			}
+		}
+	}
+
+	// 2. Render power-ups (Pocket Bomberman item panels from caracters.png)
+	texProgram.use();
+	texProgram.setUniformMatrix4f("projection", projection);
 	for(const auto &pw : powerups)
 	{
 		if(pw.isActive() && !pw.isCollected())
-		{
-			glm::vec4 color;
-			switch(pw.getType())
-			{
-			case EXTRA_BOMB:
-				color = glm::vec4(0.2f, 0.5f, 1.0f, 1.0f); // Blue
-				break;
-			case BOMB_RANGE:
-				color = glm::vec4(1.0f, 0.85f, 0.1f, 1.0f); // Yellow
-				break;
-			case SPEED_UP:
-				color = glm::vec4(0.1f, 0.9f, 0.3f, 1.0f); // Green
-				break;
-			}
-			renderQuad(pw.getPosition() + glm::vec2(tSize * 0.2f), glm::vec2(tSize * 0.6f), color);
-		}
+			pw.render(texProgram, tSize);
 	}
 
 	// 3. Render bombs (3-second animated fuse from row 3 of caracters.png)
@@ -301,28 +398,32 @@ void Scene::render()
 		}
 	}
 
-	// 6. Render player (animated sprite, greyed out when dead)
+	// 6. Render player (animated sprite, greyed out when dead, rainbow tint with the Vest)
 	texProgram.use();
 	texProgram.setUniformMatrix4f("projection", projection);
-	if(player.isAlive())
-		texProgram.setUniform4f("color", 1.0f, 1.0f, 1.0f, 1.0f);
-	else
-		texProgram.setUniform4f("color", 0.4f, 0.4f, 0.4f, 1.0f);
-	player.render();
-
-	// 7. Render remaining lives HUD anchored to the top-left of the camera viewport
-	glm::vec2 camTopLeft = cameraCenter - cameraViewSize * 0.5f;
-	for(int i = 0; i < 3; i++)
+	if(!player.isAlive())
 	{
-		glm::vec2 iconPos = camTopLeft + glm::vec2(4.0f + i * (tSize * 0.55f), 4.0f);
-		glm::vec2 iconSize(tSize * 0.40f, tSize * 0.40f);
-		if(i < player.getLives())
-			renderQuad(iconPos, iconSize, glm::vec4(0.95f, 0.15f, 0.2f, 1.0f));
-		else
-			renderQuad(iconPos, iconSize, glm::vec4(0.25f, 0.25f, 0.25f, 0.8f));
+		texProgram.setUniform4f("color", 0.4f, 0.4f, 0.4f, 1.0f);
 	}
+	else if(player.hasVest())
+	{
+		// Flash faster during the last 2 seconds to warn the vest is about to expire
+		float vt = player.getVestTimer();
+		float rate = (vt < 2000.0f) ? 0.03f : 0.012f;
+		float t = currentTime * rate;
+		texProgram.setUniform4f("color",
+		                        1.0f + 0.6f * std::sin(t),
+		                        1.0f + 0.6f * std::sin(t + 2.1f),
+		                        1.0f + 0.6f * std::sin(t + 4.2f), 1.0f);
+	}
+	else
+	{
+		texProgram.setUniform4f("color", 1.0f, 1.0f, 1.0f, 1.0f);
+	}
+	player.render();
+	texProgram.setUniform4f("color", 1.0f, 1.0f, 1.0f, 1.0f);
 
-	// 8. Debug Draw: Colisiones (toggle with 'H')
+	// 7. Debug Draw: Colisiones (toggle with 'H')
 	if(showHitboxes)
 		renderDebugDraw();
 }
@@ -335,6 +436,44 @@ bool Scene::isGameOver() const
 bool Scene::isWin() const
 {
 	return win;
+}
+
+void Scene::applySaveData(const SaveSlotData &data)
+{
+	player.applyStats(data.lives, data.maxBombs, data.bombRange, data.speedUps);
+}
+
+void Scene::exportSaveData(SaveSlotData &data) const
+{
+	data.currentWorld = currentLevel;
+	data.lives = std::max(1, player.getLives());
+	data.maxBombs = player.getMaxBombs();
+	data.bombRange = player.getBombRange();
+	data.speedUps = player.getSpeedUps();
+}
+
+void Scene::syncPlayerInputLatch()
+{
+	prevKeyH = Game::instance().getKey(GLFW_KEY_H);
+	player.syncInputLatch();
+}
+
+bool Scene::consumeWorldClearedEvent(int &outClearedWorld)
+{
+	if(!worldClearedPending_)
+		return false;
+	outClearedWorld = lastClearedWorld_;
+	worldClearedPending_ = false;
+	return true;
+}
+
+bool Scene::consumePickedPowerUp(PowerUpType &outType)
+{
+	if(!powerUpPickedPending_)
+		return false;
+	outType = lastPickedPowerUp_;
+	powerUpPickedPending_ = false;
+	return true;
 }
 
 void Scene::initShaders()
@@ -490,25 +629,29 @@ void Scene::handleBombPlacement()
 	{
 		glm::ivec2 pTile = player.getTilePosition(map);
 
-		bool bombAlreadyThere = false;
+		// Bombs can only be placed on walkable cells (never inside a wall)
+		bool blocked = !map->isWalkable(pTile.x, pTile.y);
 		for(const auto &b : bombs)
 		{
 			if(b.isActive() && b.getTilePosition() == pTile && !b.hasExploded())
 			{
-				bombAlreadyThere = true;
+				blocked = true;
 				break;
 			}
 		}
 
-		if(!bombAlreadyThere)
+		if(!blocked)
 		{
 			Bomb *b = bombs.acquire();
 			if(b != NULL)
 			{
 				b->init(pTile, map->tileToWorld(pTile), player.getBombRange());
 				player.bombPlaced();
+				return;
 			}
 		}
+		// Could not place the bomb: consume the request so it doesn't trigger later
+		player.syncInputLatch();
 	}
 }
 
@@ -545,6 +688,7 @@ void Scene::handleExplosions()
 		for(const auto &blockPos : newlyDestroyed)
 		{
 			map->destroyTile(blockPos.x, blockPos.y);
+			score += SCORE_BLOCK;
 			if((rand() % 100) < 40) // 40% chance of power-up
 			{
 				spawnPowerUp(blockPos);
@@ -617,9 +761,10 @@ void Scene::handleExplosions()
 		}
 
 		// Destroy uncollected power-ups caught in currently visible flame tiles
+		// (freshly revealed power-ups are protected by a short grace period)
 		for(auto &pw : powerups)
 		{
-			if(pw.isActive() && !pw.isCollected())
+			if(pw.isActive() && !pw.isCollected() && pw.canBeBurned())
 			{
 				for(const auto &t : exp.getAffectedTiles())
 				{
@@ -639,13 +784,28 @@ void Scene::handlePowerUpCollection()
 	if(!player.isAlive())
 		return;
 
-	glm::ivec2 pTile = player.getTilePosition(map);
+	// AABB overlap between the player hitbox and the (slightly shrunk) item panel
+	float tSize = float(map->getBlockSize());
+	glm::vec2 pPos = player.getHitboxPos();
+	glm::vec2 pSize = player.getHitboxSize();
+	float inset = tSize * 0.15f;
+
 	for(auto &pw : powerups)
 	{
-		if(pw.isActive() && !pw.isCollected() && pw.getTilePosition() == pTile)
+		if(!pw.isActive() || pw.isCollected())
+			continue;
+
+		glm::vec2 wPos = pw.getPosition() + glm::vec2(inset);
+		glm::vec2 wSize = glm::vec2(tSize - 2.0f * inset);
+		bool overlap = pPos.x < wPos.x + wSize.x && pPos.x + pSize.x > wPos.x &&
+		               pPos.y < wPos.y + wSize.y && pPos.y + pSize.y > wPos.y;
+		if(overlap)
 		{
-			player.addPowerUp(pw.getType());
+			lastPickedPowerUp_ = pw.getType();
+			powerUpPickedPending_ = true;
+			player.addPowerUp(int(pw.getType()));
 			pw.collect();
+			score += SCORE_POWERUP;
 		}
 	}
 }
@@ -695,6 +855,32 @@ void Scene::checkEntityCollisions()
 		}
 	}
 
+	// 1b. Enemy-vs-Bomb horizontal bounce so patrolling enemies turn around at placed bombs
+	for(size_t i = 0; i < activeEnemies.size(); i++)
+	{
+		if(!activeEnemies[i]->isAlive())
+			continue;
+		glm::vec2 ePos = activeEnemies[i]->getHitboxPos();
+		glm::vec2 eSize = activeEnemies[i]->getHitboxSize();
+		for(size_t b = 0; b < bombs.capacity(); b++)
+		{
+			if(!bombs[b].isActive() || bombs[b].hasExploded())
+				continue;
+			glm::vec2 bPos = bombs[b].getPosition();
+			float ox = std::min(ePos.x + eSize.x, bPos.x + tSize) - std::max(ePos.x, bPos.x);
+			float oy = std::min(ePos.y + eSize.y, bPos.y + tSize) - std::max(ePos.y, bPos.y);
+			if(ox > 0.0f && oy > tSize * 0.25f && ox < tSize * 0.45f)
+			{
+				if(ePos.x < bPos.x)
+					activeEnemies[i]->setPosition(activeEnemies[i]->getPosition() - glm::vec2(ox, 0.0f));
+				else
+					activeEnemies[i]->setPosition(activeEnemies[i]->getPosition() + glm::vec2(ox, 0.0f));
+				activeEnemies[i]->reverseDirection();
+				ePos = activeEnemies[i]->getHitboxPos();
+			}
+		}
+	}
+
 	// 2. Player-vs-Enemy solid collision, knockback & life loss using each enemy's custom hitbox
 	glm::vec2 pPos = player.getHitboxPos();
 	glm::vec2 pSize = player.getHitboxSize();
@@ -713,6 +899,13 @@ void Scene::checkEntityCollisions()
 
 		if(overlapX > 0.0f && overlapY > 0.0f)
 		{
+			// With the Vest active, touching an enemy defeats it instead of hurting the player
+			if(player.hasVest())
+			{
+				enemy->kill();
+				continue;
+			}
+
 			glm::vec2 pCenter = pPos + pSize * 0.5f;
 			glm::vec2 eCenter = ePos + eSize * 0.5f;
 			float signX = (pCenter.x < eCenter.x) ? -1.0f : 1.0f;
@@ -752,9 +945,7 @@ void Scene::spawnPowerUp(const glm::ivec2 &tilePos)
 	PowerUp *pw = powerups.acquire();
 	if(pw != NULL)
 	{
-		int roll = rand() % 3;
-		PowerUpType type = PowerUpType(roll);
-		pw->init(tilePos, map->tileToWorld(tilePos), type);
+		pw->init(tilePos, map->tileToWorld(tilePos), PowerUp::rollRandomType());
 	}
 }
 

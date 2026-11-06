@@ -32,3 +32,11 @@ x86/
 # Output files
 01-TBE/Debug/
 01-TBE/Release/
+01-TBE/build/
+01-TBE/01-TBE
+
+# Local third-party libraries
+libs/
+
+# User-specific files
+saves/
