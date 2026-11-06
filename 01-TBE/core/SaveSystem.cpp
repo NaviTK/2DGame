@@ -21,48 +21,79 @@ void SaveSystem::initWorlds()
 {
 	worlds_.clear();
 
-	// Mundo 1 -> levels/level01.txt (Forest area on the left side of the island)
+	// Nivell 1 -> levels/level01.txt
 	WorldDef w1;
 	w1.id = 1;
-	w1.name = "MUNDO 1";
-	w1.themeName = "BOSQUE VERDE";
+	w1.name = "NIVELL 1";
+	w1.themeName = "BOSC VERD";
 	w1.levelFile = "levels/level01.txt";
-	w1.mapNodePos = glm::vec2(92.0f, 154.0f);
+	w1.mapNodePos = glm::vec2(64.0f, 156.0f);
 	w1.accentColor = glm::vec4(0.18f, 0.78f, 0.30f, 1.0f);
 	w1.hasPinkEnemy = true;
 	w1.hasKirbyEnemy = true;
+	w1.hasJumperEnemy = false;
+	w1.hasBossEnemy = false;
 	worlds_.push_back(w1);
 
-	// Mundo 2 -> levels/level02.txt (Rocky ruins across the wooden river bridge)
+	// Nivell 2 -> levels/level02.txt
 	WorldDef w2;
 	w2.id = 2;
-	w2.name = "MUNDO 2";
-	w2.themeName = "RUINAS ROCOSAS";
+	w2.name = "NIVELL 2";
+	w2.themeName = "RUINES ROCOSES";
 	w2.levelFile = "levels/level02.txt";
-	w2.mapNodePos = glm::vec2(198.0f, 132.0f);
-	w2.pathFromPrev.push_back(glm::vec2(124.0f, 154.0f));
-	w2.pathFromPrev.push_back(glm::vec2(124.0f, 116.0f));
-	w2.pathFromPrev.push_back(glm::vec2(196.0f, 116.0f));
+	w2.mapNodePos = glm::vec2(124.0f, 144.0f);
+	w2.pathFromPrev.push_back(glm::vec2(94.0f, 152.0f));
 	w2.accentColor = glm::vec4(0.88f, 0.56f, 0.20f, 1.0f);
 	w2.hasPinkEnemy = true;
 	w2.hasKirbyEnemy = true;
+	w2.hasJumperEnemy = true;
+	w2.hasBossEnemy = false;
 	worlds_.push_back(w2);
 
-	// Mundo 3 -> levels/level03.txt (Crystal cave in the right mountain)
+	// Nivell 3 -> levels/level03.txt
 	WorldDef w3;
 	w3.id = 3;
-	w3.name = "MUNDO 3";
-	w3.themeName = "CUEVA DE CRISTAL";
+	w3.name = "NIVELL 3";
+	w3.themeName = "COVA DE CRISTALL";
 	w3.levelFile = "levels/level03.txt";
-	w3.mapNodePos = glm::vec2(250.0f, 100.0f);
-	w3.pathFromPrev.push_back(glm::vec2(202.0f, 152.0f));
-	w3.pathFromPrev.push_back(glm::vec2(220.0f, 152.0f));
-	w3.pathFromPrev.push_back(glm::vec2(242.0f, 136.0f));
-	w3.pathFromPrev.push_back(glm::vec2(244.0f, 112.0f));
+	w3.mapNodePos = glm::vec2(178.0f, 122.0f);
+	w3.pathFromPrev.push_back(glm::vec2(150.0f, 134.0f));
 	w3.accentColor = glm::vec4(0.25f, 0.72f, 0.96f, 1.0f);
 	w3.hasPinkEnemy = true;
 	w3.hasKirbyEnemy = true;
+	w3.hasJumperEnemy = true;
+	w3.hasBossEnemy = false;
 	worlds_.push_back(w3);
+
+	// Nivell 4 -> levels/level04.txt
+	WorldDef w4;
+	w4.id = 4;
+	w4.name = "NIVELL 4";
+	w4.themeName = "TEMPLE ANTIC";
+	w4.levelFile = "levels/level04.txt";
+	w4.mapNodePos = glm::vec2(226.0f, 108.0f);
+	w4.pathFromPrev.push_back(glm::vec2(202.0f, 116.0f));
+	w4.accentColor = glm::vec4(0.82f, 0.42f, 0.92f, 1.0f);
+	w4.hasPinkEnemy = true;
+	w4.hasKirbyEnemy = true;
+	w4.hasJumperEnemy = true;
+	w4.hasBossEnemy = false;
+	worlds_.push_back(w4);
+
+	// Nivell 5 -> levels/level05.txt (Final Boss Arena)
+	WorldDef w5;
+	w5.id = 5;
+	w5.name = "NIVELL 5";
+	w5.themeName = "FORTALESA DEL BOSS";
+	w5.levelFile = "levels/level05.txt";
+	w5.mapNodePos = glm::vec2(268.0f, 88.0f);
+	w5.pathFromPrev.push_back(glm::vec2(248.0f, 98.0f));
+	w5.accentColor = glm::vec4(1.0f, 0.28f, 0.32f, 1.0f);
+	w5.hasPinkEnemy = true;
+	w5.hasKirbyEnemy = false;
+	w5.hasJumperEnemy = true;
+	w5.hasBossEnemy = true;
+	worlds_.push_back(w5);
 }
 
 const WorldDef *SaveSystem::getWorldById(int worldId) const

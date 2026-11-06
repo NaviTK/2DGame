@@ -8,16 +8,22 @@
 class ShaderProgram;
 
 
-// Pocket Bomberman item panels (row 7 of images/caracters.png, 16x16 each)
+// Pocket Bomberman item panels (row 8 of images/caracters.png, 16x16 each)
+// Implements the 4 core power-ups:
+//   1. Bomb Up (EXTRA_BOMB)
+//   2. Fire Up (BOMB_RANGE)
+//   3. Speed Up / Roller Skate (SPEED_UP)
+//   4. Cor / Heart impact shield (HEART_SHIELD / EXTRA_LIFE)
 enum PowerUpType
 {
-	EXTRA_BOMB = 0, // Bomb Up:   +1 bomb on screen at the same time
-	BOMB_RANGE = 1, // Fire Up:   +1 flame length
-	SPEED_UP   = 2, // Skate:     faster movement
-	EXTRA_LIFE = 3, // Heart:     +1 life
-	FULL_FIRE  = 4, // Full Fire: maximum flame length
-	VEST       = 5, // Vest:      10 s invincibility
-	NUM_POWERUP_TYPES
+	EXTRA_BOMB   = 0, // Bomb Up:   +1 simultaneous bomb limit
+	BOMB_RANGE   = 1, // Fire Up:   +1 explosion tile radius
+	SPEED_UP     = 2, // Skate:     faster horizontal movement
+	HEART_SHIELD = 3, // Cor/Heart: 1-hit impact shield (absorbs next enemy/explosion hit)
+	EXTRA_LIFE   = 3, // Alias for compatibility
+	FULL_FIRE    = 4,
+	VEST         = 5,
+	NUM_POWERUP_TYPES = 4
 };
 
 

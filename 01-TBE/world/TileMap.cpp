@@ -32,6 +32,7 @@ TileMap::TileMap(const string &levelFile, const glm::vec2 &minCoords, ShaderProg
 	vbo = 0;
 	map3D_ = NULL;
 	defaultSkySprite_ = 17;
+	timeLimitSeconds_ = 120;
 	zeroIndexedTiles_ = false;
 	isNewTileset_ = false;
 	minCoords_ = minCoords;
@@ -257,6 +258,14 @@ bool TileMap::loadLevel(const string &levelFile)
 		else if(upperToken == "TILESHEET_GRID" || upperToken == "TILESHEET_SIZE")
 		{
 			ss >> tilesheetSize.x >> tilesheetSize.y;
+			activeLayerSection = -1;
+			continue;
+		}
+		else if(upperToken == "TIME_LIMIT")
+		{
+			int secs = 120;
+			if(ss >> secs && secs > 0)
+				timeLimitSeconds_ = secs;
 			activeLayerSection = -1;
 			continue;
 		}

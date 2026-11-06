@@ -49,6 +49,11 @@ public:
 	void deactivate();
 	bool isAlive() const;
 	virtual void kill();
+	virtual void forceKill() { kill(); }
+	virtual bool isBoss() const { return false; }
+	virtual int getHp() const { return isAlive() ? 1 : 0; }
+	virtual int getMaxHp() const { return 1; }
+	virtual bool isDamageFlashing() const { return false; }
 
 	glm::ivec2 getTilePosition(TileMap *map) const;
 

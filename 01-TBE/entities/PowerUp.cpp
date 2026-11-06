@@ -75,14 +75,16 @@ glm::ivec2 PowerUp::getSheetCoords(PowerUpType type)
 
 PowerUpType PowerUp::rollRandomType()
 {
-	// Weighted drop table: common upgrades first, rare specials last
+	// Drop table restricted strictly to the 4 required power-ups:
+	// 1. Bomb Up (EXTRA_BOMB)
+	// 2. Fire Up (BOMB_RANGE)
+	// 3. Cor / Heart Shield (HEART_SHIELD)
+	// 4. Speed Up / Roller Skate (SPEED_UP)
 	int roll = rand() % 100;
-	if(roll < 32) return EXTRA_BOMB;
-	if(roll < 64) return BOMB_RANGE;
-	if(roll < 82) return SPEED_UP;
-	if(roll < 91) return EXTRA_LIFE;
-	if(roll < 96) return VEST;
-	return FULL_FIRE;
+	if(roll < 28) return EXTRA_BOMB;
+	if(roll < 56) return BOMB_RANGE;
+	if(roll < 80) return SPEED_UP;
+	return HEART_SHIELD;
 }
 
 glm::vec2 PowerUp::getPosition() const

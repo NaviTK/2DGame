@@ -3,6 +3,7 @@ MAP_SIZE 18 17
 TILE_SIZE 32 16
 TILESHEET images/tileset_nuevo.png
 TILESHEET_GRID 12 8
+TIME_LIMIT 120
 
 # Mundo 2: Ruinas Rocosas
 # LAYER_0: Marco exterior + cielo cálido del desierto y muros del templo con antorchas
@@ -67,6 +68,6 @@ LAYER_2
 
 PLAYER_SPAWN 2 14
 ENEMY_SPAWN PINK 3 5
-ENEMY_SPAWN PINK 12 3
+ENEMY_SPAWN JUMPER 12 3
 ENEMY_SPAWN KIRBY 13 8
-ENEMY_SPAWN KIRBY 10 14
+ENEMY_SPAWN JUMPER 10 14

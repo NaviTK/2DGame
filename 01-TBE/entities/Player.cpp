@@ -21,6 +21,8 @@ Player::Player() : sprite(NULL), spriteTileSize_(0.0f), facing(STAND_RIGHT)
 	lives = 3;
 	invulnTimer = 0.0f;
 	vestTimer = 0.0f;
+	heartShield_ = false;
+	godMode_ = false;
 	alive = true;
 	onGround = false;
 	climbing = false;
@@ -195,6 +197,7 @@ void Player::init(const glm::vec2 &initialPos, float tileSize)
 	lives = 3;
 	invulnTimer = 0.0f;
 	vestTimer = 0.0f;
+	heartShield_ = false;
 	alive = true;
 	onGround = false;
 	climbing = false;
@@ -460,15 +463,15 @@ void Player::update(int deltaTime, TileMap *map)
 			float snappedColY = pos.y + colOffset.y;
 			bool landed = map->collisionMoveDown(pos + colOffset, colSize, &snappedColY, prevBottomY);
 
-			// Pocket Bomberman mechanic: active bombs act as one-way platforms from above
-			// so the player can jump onto a placed bomb and bomb-jump to higher ledges.
+			// Pocket Bomberman mechanic: active bombs act as temporary solid surfaces
+			// from above so the player can jump onto a placed bomb and reach elevated platforms.
 			float hx = pos.x + colOffset.x;
 			float newBottomY = pos.y + colOffset.y + colSize.y;
 			for(size_t b = 0; b < bombPlatforms_.size(); b++)
 			{
 				const glm::vec2 &bp = bombPlatforms_[b];
-				if(hx + colSize.x > bp.x + 2.0f && hx < bp.x + tSize - 2.0f &&
-				   prevBottomY <= bp.y + 2.5f && newBottomY >= bp.y)
+				if(hx + colSize.x > bp.x + 1.0f && hx < bp.x + tSize - 1.0f &&
+				   prevBottomY <= bp.y + 4.5f && newBottomY >= bp.y - 0.5f)
 				{
 					float candidateY = bp.y - colSize.y;
 					if(!landed || candidateY < snappedColY)
@@ -566,7 +569,46 @@ int Player::getLives() const
 
 bool Player::isInvulnerable() const
 {
-	return invulnTimer > 0.0f || vestTimer > 0.0f;
+	return godMode_ || invulnTimer > 0.0f || vestTimer > 0.0f;
+}
+
+bool Player::hasHeartShield() const
+{
+	return heartShield_;
+}
+
+void Player::setHeartShield(bool active)
+{
+	heartShield_ = active;
+}
+
+bool Player::isGodMode() const
+{
+	return godMode_;
+}
+
+void Player::setGodMode(bool enabled)
+{
+	godMode_ = enabled;
+}
+
+void Player::toggleGodMode()
+{
+	godMode_ = !godMode_;
+}
+
+bool Player::loseLifeFromTimeout()
+{
+	if(godMode_)
+		return true;
+	lives--;
+	if(lives <= 0)
+	{
+		lives = 0;
+		alive = false;
+		return false;
+	}
+	return true;
 }
 
 bool Player::hasVest() const
@@ -591,8 +633,17 @@ bool Player::shouldRenderBlink() const
 
 void Player::takeDamage()
 {
-	if(!alive || invulnTimer > 0.0f || vestTimer > 0.0f)
+	if(!alive || godMode_ || invulnTimer > 0.0f || vestTimer > 0.0f)
 		return;
+
+	// If the "Cor" (Heart) shield is active, it absorbs the hit and disappears
+	// without subtracting any of the 3 main lives.
+	if(heartShield_)
+	{
+		heartShield_ = false;
+		invulnTimer = 2000.0f;
+		return;
+	}
 
 	lives--;
 	if(lives <= 0)
@@ -655,23 +706,23 @@ void Player::addPowerUp(int type)
 {
 	switch(type)
 	{
-	case 0: // EXTRA_BOMB
+	case 0: // EXTRA_BOMB (Bomb Up: +1 max simultaneous bombs)
 		if(maxBombs < MAX_BOMBS_CAP) maxBombs++;
 		break;
-	case 1: // BOMB_RANGE
+	case 1: // BOMB_RANGE (Fire Up: +1 explosion tile radius)
 		if(bombRange < MAX_RANGE_CAP) bombRange++;
 		break;
-	case 2: // SPEED
+	case 2: // SPEED_UP (Roller Skate: faster horizontal movement)
 		if(speedUps < MAX_SPEED_UPS) speedUps++;
 		speed = tileSize_ * (0.0055f + 0.0015f * float(speedUps));
 		break;
-	case 3: // EXTRA_LIFE
-		if(lives < MAX_LIVES) lives++;
+	case 3: // HEART_SHIELD (Cor: 1-hit impact shield absorbing next enemy/explosion hit)
+		heartShield_ = true;
 		break;
 	case 4: // FULL_FIRE
 		bombRange = MAX_RANGE_CAP;
 		break;
-	case 5: // VEST (10 seconds of invincibility)
+	case 5: // VEST
 		vestTimer = 10000.0f;
 		break;
 	default:
@@ -684,13 +735,14 @@ int Player::getSpeedUps() const
 	return speedUps;
 }
 
-void Player::applyStats(int newLives, int newMaxBombs, int newBombRange, int newSpeedUps)
+void Player::applyStats(int newLives, int newMaxBombs, int newBombRange, int newSpeedUps, bool hasHeart)
 {
 	lives = glm::clamp(newLives, 1, int(MAX_LIVES));
 	alive = true;
 	maxBombs = glm::clamp(newMaxBombs, 1, int(MAX_BOMBS_CAP));
 	bombRange = glm::clamp(newBombRange, 1, int(MAX_RANGE_CAP));
 	speedUps = glm::clamp(newSpeedUps, 0, int(MAX_SPEED_UPS));
+	heartShield_ = hasHeart;
 	speed = tileSize_ * (0.0055f + 0.0015f * float(speedUps));
 }
 

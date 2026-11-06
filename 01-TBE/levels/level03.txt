@@ -3,6 +3,7 @@ MAP_SIZE 18 17
 TILE_SIZE 32 16
 TILESHEET images/tileset_nuevo.png
 TILESHEET_GRID 12 8
+TIME_LIMIT 135
 
 # Mundo 3: Cueva de Cristal
 # LAYER_0: Marco engastado, fondos opacos de caverna y subsuelo
@@ -66,8 +67,8 @@ LAYER_2
 .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .
 
 PLAYER_SPAWN 2 14
-ENEMY_SPAWN PINK 13 14
+ENEMY_SPAWN JUMPER 13 14
 ENEMY_SPAWN KIRBY 8 11
 ENEMY_SPAWN PINK 12 8
-ENEMY_SPAWN KIRBY 5 5
+ENEMY_SPAWN JUMPER 5 5
 ENEMY_SPAWN KIRBY 11 3

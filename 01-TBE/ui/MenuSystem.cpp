@@ -111,7 +111,7 @@ void MenuSystem::init(Scene *scene)
 	if(w1 != NULL)
 		cursorPos_ = w1->mapNodePos;
 
-	state_ = STATE_TITLE;
+	state_ = STATE_MAIN_MENU;
 	fade_ = 1.0f;
 	fadeDir_ = -1;
 }
@@ -348,6 +348,7 @@ bool MenuSystem::update(int deltaTime)
 	case STATE_TITLE:        updateTitle(deltaTime);       break;
 	case STATE_MAIN_MENU:    updateMainMenu(deltaTime);    break;
 	case STATE_CONTROLS:     updateControls(deltaTime);    break;
+	case STATE_CREDITS:      updateCredits(deltaTime);     break;
 	case STATE_SLOT_SELECT:  updateSlotSelect(deltaTime);  break;
 	case STATE_WORLD_SELECT: updateWorldSelect(deltaTime); break;
 	case STATE_PLAYING:      updatePlaying(deltaTime);     break;
@@ -405,12 +406,26 @@ void MenuSystem::updateMainMenu(int deltaTime)
 	(void)deltaTime;
 	const int itemCount = 5;
 
+	// Direct level debug keys ('1'..'5') also work from the Main Menu for instant evaluation
+	for(int lvl = 1; lvl <= 5; lvl++)
+	{
+		if(Game::instance().justPressed(GLFW_KEY_1 + (lvl - 1)))
+		{
+			freePlayMode_ = true;
+			save_.resetDefaults();
+			save_.highestUnlockedWorld = SaveSystem::instance().getWorldCount();
+			worldSel_ = lvl;
+			changeState(STATE_PLAYING, ACTION_START_WORLD);
+			return;
+		}
+	}
+
 	if(pressedUp())
 		mainSel_ = (mainSel_ + itemCount - 1) % itemCount;
 	else if(pressedDown())
 		mainSel_ = (mainSel_ + 1) % itemCount;
 
-	int hovered = hitTestMenuList(itemCount, 160.0f, 114.0f, 17.0f, 180.0f);
+	int hovered = hitTestMenuList(itemCount, 160.0f, 110.0f, 18.0f, 180.0f);
 	if(hovered >= 0 && Game::instance().didMouseMove())
 		mainSel_ = hovered;
 
@@ -422,30 +437,47 @@ void MenuSystem::updateMainMenu(int deltaTime)
 	{
 		switch(mainSel_)
 		{
-		case 0: // EMPEZAR PARTIDA
-			openSlotScreen(SLOT_NEW, STATE_MAIN_MENU);
+		case 0: // JUGAR (Starts Level 1 immediately with 3 lives)
+			freePlayMode_ = true;
+			save_.resetDefaults();
+			save_.lives = 3;
+			save_.currentWorld = 1;
+			save_.highestUnlockedWorld = SaveSystem::instance().getWorldCount();
+			worldSel_ = 1;
+			clearGameComplete_ = false;
+			changeState(STATE_PLAYING, ACTION_START_WORLD);
 			break;
-		case 1: // CARGAR PARTIDA
-			openSlotScreen(SLOT_LOAD, STATE_MAIN_MENU);
-			break;
-		case 2: // SELECCIONAR MUNDO
-			openDirectWorldSelect();
-			break;
-		case 3: // CONTROLES Y OBJETOS
+		case 1: // INSTRUCCIONS
 			changeState(STATE_CONTROLS);
 			break;
-		case 4: // SALIR
+		case 2: // CREDITS
+			clearGameComplete_ = false;
+			changeState(STATE_CREDITS);
+			break;
+		case 3: // MAPA DE NIVELLS / PARTIDES
+			openDirectWorldSelect();
+			break;
+		case 4: // SORTIR
 			quit_ = true;
 			break;
 		}
 	}
 	else if(pressedBack())
 	{
-		changeState(STATE_TITLE);
+		quit_ = true;
 	}
 }
 
 void MenuSystem::updateControls(int deltaTime)
+{
+	(void)deltaTime;
+	if(pressedConfirm() || pressedBack() || Game::instance().mouseJustPressed(GLFW_MOUSE_BUTTON_LEFT))
+	{
+		changeState(STATE_MAIN_MENU);
+	}
+}
+
+void MenuSystem::updateCredits(int deltaTime)
 {
 	(void)deltaTime;
 	if(pressedConfirm() || pressedBack() || Game::instance().mouseJustPressed(GLFW_MOUSE_BUTTON_LEFT))
@@ -699,25 +731,37 @@ void MenuSystem::updatePlaying(int deltaTime)
 		return;
 	}
 
-	// Quick level testing shortcuts ('1', '2', '3', 'R')
-	if(Game::instance().justPressed(GLFW_KEY_1))
+	// Debug Key 'G': Toggle God Mode (invulnerable to enemies and own explosions)
+	if(Game::instance().justPressed(GLFW_KEY_G))
 	{
-		worldSel_ = 1;
-		startWorld(false);
-		return;
+		scene_->getPlayerMutable().toggleGodMode();
+		bool gm = scene_->getPlayer().isGodMode();
+		showToast(gm ? "GOD MODE: ACTIVAT (INVULNERABLE)" : "GOD MODE: DESACTIVAT");
 	}
-	if(Game::instance().justPressed(GLFW_KEY_2) && SaveSystem::instance().getWorldCount() >= 2)
+
+	// Debug Key 'K': Kill All active enemies immediately and open the exit door
+	if(Game::instance().justPressed(GLFW_KEY_K))
 	{
-		worldSel_ = 2;
-		startWorld(false);
-		return;
+		scene_->killAllEnemies();
+		showToast("KILL ALL: PORTA DE SORTIDA OBERTA!");
 	}
-	if(Game::instance().justPressed(GLFW_KEY_3) && SaveSystem::instance().getWorldCount() >= 3)
+
+	// Debug Keys '1', '2', '3', '4', '5': Directly and automatically load Level 1..5
+	for(int lvl = 1; lvl <= 5; lvl++)
 	{
-		worldSel_ = 3;
-		startWorld(false);
-		return;
+		if(Game::instance().justPressed(GLFW_KEY_1 + (lvl - 1)))
+		{
+			worldSel_ = lvl;
+			save_.currentWorld = lvl;
+			scene_->loadLevel(lvl, true);
+			scene_->syncPlayerInputLatch();
+			introTimer_ = 1400.0f;
+			pickupTimer_ = 0.0f;
+			showToast("CARREGAT NIVELL " + intToStr(lvl));
+			return;
+		}
 	}
+
 	if(Game::instance().justPressed(GLFW_KEY_R))
 	{
 		startWorld(true);
@@ -725,6 +769,13 @@ void MenuSystem::updatePlaying(int deltaTime)
 	}
 
 	scene_->update(deltaTime);
+
+	if(scene_->consumeTimeoutRestartEvent())
+	{
+		introTimer_ = 1400.0f;
+		showToast("TEMPS ESGOTAT! -1 VIDA (REINICI)");
+		return;
+	}
 
 	PowerUpType picked;
 	if(scene_->consumePickedPowerUp(picked))
@@ -740,10 +791,14 @@ void MenuSystem::updatePlaying(int deltaTime)
 		return;
 	}
 
+	// Losing all 3 lives triggers immediate Game Over, returning directly to the Main Menu
 	if(scene_->isGameOver())
 	{
-		overSel_ = 0;
-		state_ = STATE_GAME_OVER;
+		save_.lives = 3;
+		levelStartSnapshot_.lives = 3;
+		mainSel_ = 0;
+		showToast("GAME OVER - HAS PERDUT LES 3 VIDES", 2800.0f);
+		state_ = STATE_MAIN_MENU;
 		stateTime_ = 0.0f;
 	}
 }
@@ -1028,21 +1083,31 @@ void MenuSystem::onWorldCleared(int worldId)
 		save_.highestUnlockedWorld = worldId + 1;
 		clearUnlockedNew_ = true;
 	}
-	if(worldId < worldCount)
-		save_.currentWorld = worldId + 1;
-
-	clearGameComplete_ = (save_.countCompletedWorlds(worldCount) >= worldCount);
 
 	if(currentSlot_ >= 0)
 	{
 		save_.timestamp = SaveSystem::buildCurrentTimestamp();
 		SaveSystem::instance().saveSlot(currentSlot_, save_);
-		showToast("AUTOGUARDADO EN RANURA " + intToStr(currentSlot_ + 1));
 	}
 
-	clearSel_ = 0;
-	state_ = STATE_WORLD_CLEAR;
-	stateTime_ = 0.0f;
+	// Reaching the open exit door on Levels 1..4 advances directly to the next level!
+	if(worldId < worldCount)
+	{
+		worldSel_ = worldId + 1;
+		save_.currentWorld = worldSel_;
+		levelStartSnapshot_ = save_;
+		scene_->loadLevel(worldSel_, true);
+		scene_->syncPlayerInputLatch();
+		introTimer_ = 1700.0f;
+		pickupTimer_ = 0.0f;
+		showToast("NIVELL " + intToStr(worldId) + " SUPERAT! -> NIVELL " + intToStr(worldSel_));
+		return;
+	}
+
+	// Level 5 (Final Boss) cleared -> Victory & Credits screen!
+	clearGameComplete_ = true;
+	showToast("ENHORABONA! JOC COMPLETAT!", 3200.0f);
+	changeState(STATE_CREDITS);
 }
 
 bool MenuSystem::isWorldUnlocked(int worldId) const
@@ -1132,6 +1197,7 @@ void MenuSystem::render()
 	case STATE_TITLE:        renderTitle();       break;
 	case STATE_MAIN_MENU:    renderMainMenu();    break;
 	case STATE_CONTROLS:     renderControls();    break;
+	case STATE_CREDITS:      renderCredits();     break;
 	case STATE_SLOT_SELECT:  renderSlotSelect();  break;
 	case STATE_WORLD_SELECT: renderWorldSelect(); break;
 	case STATE_PLAYING:      renderHUD();         break;
@@ -1210,66 +1276,133 @@ void MenuSystem::renderMainMenu()
 	ui_.panel(glm::vec2(58.0f, 98.0f), glm::vec2(204.0f, 116.0f), COL_PANEL_BG, COL_PANEL_BORDER);
 
 	std::vector<std::string> items;
-	items.push_back("EMPEZAR PARTIDA");
-	items.push_back("CARGAR PARTIDA");
-	items.push_back("SELECCIONAR MUNDO");
-	items.push_back("CONTROLES Y OBJETOS");
-	items.push_back("SALIR");
+	items.push_back("JUGAR");
+	items.push_back("INSTRUCCIONS");
+	items.push_back("CR" UTF8_E_AC "DITS");
+	items.push_back("MAPA / PARTIDES");
+	items.push_back("SORTIR");
 	std::vector<bool> enabled(items.size(), true);
 
 	renderMenuList(items, enabled, mainSel_, 160.0f, 110.0f, 18.0f, 180.0f);
-	renderHint("FLECHAS/RAT" UTF8_O_AC "N: MOVER   ENTER: ELEGIR");
+	renderHint("FLETXES/RATOL" UTF8_I_AC ": MOURE   ENTER: TRIAR");
 }
 
 void MenuSystem::renderControls()
 {
-	renderTitleBackground(0.55f);
+	renderTitleBackground(0.65f);
 
-	ui_.panel(glm::vec2(12.0f, 10.0f), glm::vec2(296.0f, 206.0f), COL_PANEL_BG, COL_PANEL_BORDER);
-	ui_.textCentered("CONTROLES Y OBJETOS", 160.0f, 19.0f, 1.0f, COL_GOLD);
-	ui_.rect(glm::vec2(22.0f, 31.0f), glm::vec2(276.0f, 1.0f), glm::vec4(1.0f, 0.82f, 0.25f, 0.5f));
+	ui_.panel(glm::vec2(8.0f, 6.0f), glm::vec2(304.0f, 214.0f), COL_PANEL_BG, COL_PANEL_BORDER);
+	ui_.textCentered("INSTRUCCIONS DEL JOC", 160.0f, 12.0f, 1.0f, COL_GOLD);
+	ui_.rect(glm::vec2(16.0f, 22.0f), glm::vec2(288.0f, 1.0f), glm::vec4(1.0f, 0.82f, 0.25f, 0.5f));
 
-	// Left column: Controls
-	ui_.text("CONTROLES", glm::vec2(24.0f, 38.0f), 1.0f, COL_SKY);
-	ui_.text("A/D O " UTF8_ARR_L "/" UTF8_ARR_R ": MOVER", glm::vec2(24.0f, 52.0f), 1.0f, COL_WHITE);
-	ui_.text("W O ARRIBA: SALTAR",     glm::vec2(24.0f, 65.0f), 1.0f, COL_WHITE);
-	ui_.text("W/S EN LIANA: TREPAR",   glm::vec2(24.0f, 78.0f), 1.0f, COL_WHITE);
-	ui_.text("ESPACIO: PONER BOMBA",   glm::vec2(24.0f, 91.0f), 1.0f, COL_WHITE);
-	ui_.text("ESC O P: MENU PAUSA",    glm::vec2(24.0f, 104.0f), 1.0f, COL_WHITE);
-	ui_.text("H: VER COLISIONES",      glm::vec2(24.0f, 117.0f), 1.0f, COL_MUTED);
+	// Top-Left: Controls & Debug Keys
+	ui_.text("1. CONTROLS", glm::vec2(16.0f, 26.0f), 1.0f, COL_SKY);
+	ui_.text("A/D O " UTF8_ARR_L "/" UTF8_ARR_R ": MOURE",   glm::vec2(16.0f, 37.0f), 1.0f, COL_WHITE);
+	ui_.text("W O AMUNT: SALTAR",     glm::vec2(16.0f, 47.0f), 1.0f, COL_WHITE);
+	ui_.text("W/S: TREPAR LIANA",     glm::vec2(16.0f, 57.0f), 1.0f, COL_WHITE);
+	ui_.text("ESPAI: POSAR BOMBA",    glm::vec2(16.0f, 67.0f), 1.0f, COL_WHITE);
+	ui_.text("G:GOD  K:KILL  1-5:NIV",glm::vec2(16.0f, 77.0f), 1.0f, COL_GOLD);
+	ui_.text("H:HITBOX  P/ESC:PAUSA", glm::vec2(16.0f, 87.0f), 1.0f, COL_MUTED);
 
-	ui_.rect(glm::vec2(22.0f, 132.0f), glm::vec2(128.0f, 1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 0.2f));
-	ui_.text("TRUCO BOMBERMAN:", glm::vec2(24.0f, 138.0f), 1.0f, COL_GOLD);
-	ui_.text("SALTA SOBRE TU BOMBA", glm::vec2(24.0f, 150.0f), 1.0f, COL_CREAM);
-	ui_.text("PARA SUBIR MAS ALTO!", glm::vec2(24.0f, 161.0f), 1.0f, COL_CREAM);
+	// Bottom-Left: Mechanics
+	ui_.rect(glm::vec2(16.0f, 99.0f), glm::vec2(136.0f, 1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 0.2f));
+	ui_.text("2. MECANIQUES", glm::vec2(16.0f, 103.0f), 1.0f, COL_SKY);
+	ui_.text("- ELIMINA TOTS ELS",  glm::vec2(16.0f, 114.0f), 1.0f, COL_CREAM);
+	ui_.text("  ENEMICS PER OBRIR", glm::vec2(16.0f, 124.0f), 1.0f, COL_CREAM);
+	ui_.text("  LA PORTA FINAL.",   glm::vec2(16.0f, 134.0f), 1.0f, COL_CREAM);
+	ui_.text("- SALTA SOBRE LES",   glm::vec2(16.0f, 146.0f), 1.0f, COL_GREEN);
+	ui_.text("  BOMBES (SOLIDES)!", glm::vec2(16.0f, 156.0f), 1.0f, COL_GREEN);
+	ui_.text("- 3 VIDES / CRONO:",  glm::vec2(16.0f, 168.0f), 1.0f, COL_WHITE);
+	ui_.text("  0 VIDES = GAME OVER",glm::vec2(16.0f, 178.0f), 1.0f, COL_RED);
 
 	// Vertical divider
-	ui_.rect(glm::vec2(158.0f, 36.0f), glm::vec2(1.0f, 144.0f), glm::vec4(1.0f, 0.82f, 0.25f, 0.35f));
+	ui_.rect(glm::vec2(156.0f, 25.0f), glm::vec2(1.0f, 165.0f), glm::vec4(1.0f, 0.82f, 0.25f, 0.35f));
 
-	// Right column: Power-Ups with real sprites from caracters.png
-	ui_.text("POWER-UPS", glm::vec2(166.0f, 38.0f), 1.0f, COL_SKY);
-	const PowerUpType types[6] = { EXTRA_BOMB, BOMB_RANGE, SPEED_UP, EXTRA_LIFE, FULL_FIRE, VEST };
-	const char *labels[6] = {
-		"+1 BOMBA MAX",
-		"+1 RANGO FUEGO",
-		"+VELOCIDAD",
-		"+1 VIDA EXTRA",
-		"FUEGO MAXIMO",
-		"CHALECO 10 SEG"
+	// Top-Right: The 4 Power-Ups with their sprites
+	ui_.text("3. POWER-UPS (4)", glm::vec2(162.0f, 26.0f), 1.0f, COL_SKY);
+	const PowerUpType types[4] = { EXTRA_BOMB, BOMB_RANGE, HEART_SHIELD, SPEED_UP };
+	const char *labels[4] = {
+		"BOMB UP (+1 BOMBA)",
+		"FIRE UP (+1 ABAST)",
+		"COR (ESCUT 1 COP)",
+		"SPEED UP (+VELOC.)"
 	};
-	for(int i = 0; i < 6; i++)
+	for(int i = 0; i < 4; i++)
 	{
-		float ry = 50.0f + float(i) * 21.0f;
+		float ry = 37.0f + float(i) * 15.0f;
 		glm::ivec2 src = PowerUp::getSheetCoords(types[i]);
-		ui_.sheet(glm::vec2(166.0f, ry), glm::vec2(16.0f, 16.0f), src.x, src.y, 16, 16);
-		ui_.text(labels[i], glm::vec2(186.0f, ry + 4.0f), 1.0f, COL_WHITE);
+		ui_.sheet(glm::vec2(162.0f, ry - 2.0f), glm::vec2(13.0f, 13.0f), src.x, src.y, 16, 16);
+		ui_.text(labels[i], glm::vec2(178.0f, ry + 1.0f), 1.0f, COL_WHITE);
 	}
 
-	ui_.panel(glm::vec2(106.0f, 190.0f), glm::vec2(108.0f, 18.0f),
-	          glm::vec4(0.14f, 0.22f, 0.44f, 1.0f), COL_GOLD);
-	ui_.textCentered("VOLVER", 160.0f, 195.0f, 1.0f, COL_GOLD);
+	// Bottom-Right: The 3 Enemy Types + Level 5 Boss with their real sprites
+	ui_.rect(glm::vec2(162.0f, 99.0f), glm::vec2(142.0f, 1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 0.2f));
+	ui_.text("4. ENEMICS I BOSS", glm::vec2(162.0f, 103.0f), 1.0f, COL_SKY);
 
-	renderHint("PULSA ENTER, ESC O CLIC PARA VOLVER");
+	int step = (int(time_ / 200.0f) % 2);
+	// Type 1: PinkEnemy (row 10, y=153)
+	ui_.sheet(glm::vec2(162.0f, 113.0f), glm::vec2(14.0f, 14.0f), step ? 30 : 45, 153, 15, 16);
+	ui_.text("T1 PINK: PATRULLA", glm::vec2(180.0f, 116.0f), 1.0f, COL_WHITE);
+
+	// Type 2: KirbyEnemy (row 11, y=171)
+	ui_.sheet(glm::vec2(162.0f, 130.0f), glm::vec2(14.0f, 14.0f), step ? 2 : 52, 171, 16, 16);
+	ui_.text("T2 KIRBY: PERSEGUIDOR", glm::vec2(180.0f, 133.0f), 1.0f, COL_WHITE);
+
+	// Type 3: JumperEnemy (row 15, y=243)
+	ui_.sheet(glm::vec2(162.0f, 147.0f), glm::vec2(14.0f, 14.0f), step ? 2 : 38, 243, 16, 16);
+	ui_.text("T3 JUMPER: SALTADOR", glm::vec2(180.0f, 150.0f), 1.0f, COL_WHITE);
+
+	// Level 5 Boss (row 25, y=597, 32x32)
+	ui_.sheet(glm::vec2(160.0f, 163.0f), glm::vec2(18.0f, 18.0f), step ? 2 : 68, 597, 32, 32);
+	ui_.text("BOSS (N5): 5 VIDES", glm::vec2(180.0f, 168.0f), 1.0f, COL_GOLD);
+
+	ui_.panel(glm::vec2(106.0f, 196.0f), glm::vec2(108.0f, 16.0f),
+	          glm::vec4(0.14f, 0.22f, 0.44f, 1.0f), COL_GOLD);
+	ui_.textCentered("TORNAR AL MENU", 160.0f, 200.0f, 1.0f, COL_GOLD);
+
+	renderHint("PREM ENTER, ESC O CLIC PER TORNAR AL MENU");
+}
+
+void MenuSystem::renderCredits()
+{
+	renderTitleBackground(0.62f);
+
+	ui_.panel(glm::vec2(18.0f, 10.0f), glm::vec2(284.0f, 206.0f), COL_PANEL_BG, COL_PANEL_BORDER);
+
+	if(clearGameComplete_)
+	{
+		ui_.textCentered(UTF8_STAR " ENHORABONA! HAS COMPLETAT EL JOC! " UTF8_STAR, 160.0f, 18.0f, 1.0f, COL_GREEN);
+		ui_.textCentered("CR" UTF8_E_AC "DITS", 160.0f, 30.0f, 2.0f, COL_GOLD);
+	}
+	else
+	{
+		ui_.textCentered("CR" UTF8_E_AC "DITS DEL JOC", 160.0f, 18.0f, 2.0f, COL_GOLD);
+	}
+
+	ui_.rect(glm::vec2(30.0f, 48.0f), glm::vec2(260.0f, 1.0f), glm::vec4(1.0f, 0.82f, 0.25f, 0.5f));
+
+	ui_.textCentered("POCKET BOMBERMAN 2D - PLATAFORMES", 160.0f, 56.0f, 1.0f, COL_SKY);
+	ui_.textCentered("PROJECTE DE VIDEOJOCS (C++ / OPENGL 3.3)", 160.0f, 68.0f, 1.0f, COL_CREAM);
+
+	ui_.text("AUTORIA I DESENVOLUPAMENT:", glm::vec2(34.0f, 86.0f), 1.0f, COL_GOLD);
+	ui_.text("- MOTOR GRAFIC, FISIQUES I IA: EQUIP VJ", glm::vec2(34.0f, 98.0f), 1.0f, COL_WHITE);
+	ui_.text("- DISSENY DE 5 NIVELLS I BOSS: EQUIP VJ", glm::vec2(34.0f, 110.0f), 1.0f, COL_WHITE);
+	ui_.text("- ARQUITECTURA: OBJECT POOL + MATRIU 3D", glm::vec2(34.0f, 122.0f), 1.0f, COL_WHITE);
+	ui_.text("- SPRITES ORIGINALS: HUDSON SOFT (1997)", glm::vec2(34.0f, 134.0f), 1.0f, COL_MUTED);
+
+	// Animated parade of Bomberman, the 3 Enemies, and the Final Boss
+	int step = (int(time_ / 180.0f) % 2);
+	renderBomberman(glm::vec2(68.0f, 178.0f), true, true, 1.25f);
+	ui_.sheet(glm::vec2(106.0f, 160.0f), glm::vec2(16.0f, 16.0f), step ? 30 : 45, 153, 15, 16);
+	ui_.sheet(glm::vec2(142.0f, 160.0f), glm::vec2(16.0f, 16.0f), step ? 2 : 36, 171, 16, 16);
+	ui_.sheet(glm::vec2(178.0f, 160.0f), glm::vec2(16.0f, 16.0f), step ? 2 : 38, 243, 16, 16);
+	ui_.sheet(glm::vec2(218.0f, 150.0f), glm::vec2(28.0f, 28.0f), step ? 2 : 68, 597, 32, 32);
+
+	ui_.panel(glm::vec2(104.0f, 190.0f), glm::vec2(112.0f, 18.0f),
+	          glm::vec4(0.14f, 0.22f, 0.44f, 1.0f), COL_GOLD);
+	ui_.textCentered("MENU PRINCIPAL", 160.0f, 195.0f, 1.0f, COL_GOLD);
+
+	renderHint("PREM ENTER, ESC O CLIC PER TORNAR AL MENU");
 }
 
 void MenuSystem::renderSlotSelect()
@@ -1494,12 +1627,29 @@ void MenuSystem::renderWorldInfoPanel()
 		ui_.text("BLOQUEADO (SUPERA M" + intToStr(w->id - 1) + ")", glm::vec2(pPos.x + 10.0f, pPos.y + 19.0f), 1.0f, COL_RED);
 
 	// Enemy preview sprites
-	ui_.text("FAUNA:", glm::vec2(pPos.x + 132.0f, pPos.y + 19.0f), 1.0f, COL_MUTED);
+	ui_.text("FAUNA:", glm::vec2(pPos.x + 128.0f, pPos.y + 19.0f), 1.0f, COL_MUTED);
 	int step = (int(time_ / 180.0f) % 2);
+	float fx = pPos.x + 168.0f;
 	if(w->hasPinkEnemy)
-		ui_.sheet(glm::vec2(pPos.x + 172.0f, pPos.y + 14.0f), glm::vec2(14.0f, 15.0f), step ? 30 : 45, 153, 15, 16);
+	{
+		ui_.sheet(glm::vec2(fx, pPos.y + 14.0f), glm::vec2(14.0f, 15.0f), step ? 30 : 45, 153, 15, 16);
+		fx += 16.0f;
+	}
 	if(w->hasKirbyEnemy)
-		ui_.sheet(glm::vec2(pPos.x + 190.0f, pPos.y + 14.0f), glm::vec2(15.0f, 15.0f), step ? 2 : 36, 171, 16, 16);
+	{
+		ui_.sheet(glm::vec2(fx, pPos.y + 14.0f), glm::vec2(15.0f, 15.0f), step ? 2 : 36, 171, 16, 16);
+		fx += 16.0f;
+	}
+	if(w->hasJumperEnemy)
+	{
+		ui_.sheet(glm::vec2(fx, pPos.y + 14.0f), glm::vec2(14.0f, 14.0f), step ? 3 : 20, 243, 16, 16);
+		fx += 16.0f;
+	}
+	if(w->hasBossEnemy)
+	{
+		ui_.sheet(glm::vec2(fx, pPos.y + 13.0f), glm::vec2(16.0f, 16.0f), step ? 7 : 37, 597, 29, 32);
+		fx += 18.0f;
+	}
 
 	// Clickable [JUGAR] button on the right of the card
 	glm::vec2 playBtn(238.0f + shakeX, 191.0f), playSz(62.0f, 20.0f);
@@ -1524,73 +1674,83 @@ void MenuSystem::renderHUD()
 	const Player &p = scene_->getPlayer();
 
 	// Compact Game Boy Color top HUD bar
-	ui_.rect(glm::vec2(0.0f, 0.0f), glm::vec2(320.0f, 18.0f), glm::vec4(0.04f, 0.07f, 0.16f, 0.86f));
+	ui_.rect(glm::vec2(0.0f, 0.0f), glm::vec2(320.0f, 18.0f), glm::vec4(0.04f, 0.07f, 0.16f, 0.90f));
 	ui_.rect(glm::vec2(0.0f, 18.0f), glm::vec2(320.0f, 1.0f), glm::vec4(1.0f, 0.82f, 0.25f, 0.65f));
 
-	// Separate pixel-art red hearts (one icon per remaining life)
+	// 1. Lives remaining (up to 3 heart icons + numeric count)
 	int lives = std::max(0, p.getLives());
-	float heartStartX = 5.0f;
-	float heartStep = (lives > 5) ? float(UIRenderer::HEART_W + 1) : float(UIRenderer::HEART_W + 2);
-	for(int i = 0; i < lives; i++)
+	float heartStartX = 4.0f;
+	for(int i = 0; i < 3; i++)
 	{
-		ui_.heart(glm::vec2(heartStartX + float(i) * heartStep, 4.0f));
+		float hx = heartStartX + float(i) * 12.0f;
+		if(i < lives)
+			ui_.heart(glm::vec2(hx, 4.0f));
+		else
+			ui_.rectOutline(glm::vec2(hx + 1.0f, 5.0f), glm::vec2(9.0f, 8.0f), COL_MUTED, 1.0f);
 	}
 
-	float heartsEnd = (lives > 0)
-	                  ? (heartStartX + float(lives - 1) * heartStep + float(UIRenderer::HEART_W))
-	                  : heartStartX;
-
-	// Power-up stats (fixed anchor up to 3 hearts so icons stay steady when losing lives)
-	float statStep = (lives > 5) ? 23.0f : 26.0f;
-	float x = std::max(48.0f, heartsEnd + 6.0f);
+	// 2. Power-up stats: Max Bombs, Explosion Range (Fire Up), Speed Up, and "Cor" (Heart Shield) indicator
+	float x = 43.0f;
 	float y = 3.0f;
 
+	// Max simultaneous bombs (Bomb Up)
 	glm::ivec2 bSrc = PowerUp::getSheetCoords(EXTRA_BOMB);
 	ui_.sheet(glm::vec2(x, y), glm::vec2(12.0f, 12.0f), bSrc.x, bSrc.y, 16, 16);
-	ui_.text(intToStr(p.getMaxBombs()), glm::vec2(x + 14.0f, y + 2.0f), 1.0f, COL_WHITE);
-	x += statStep;
-
-	glm::ivec2 rSrc = PowerUp::getSheetCoords(BOMB_RANGE);
-	ui_.sheet(glm::vec2(x, y), glm::vec2(12.0f, 12.0f), rSrc.x, rSrc.y, 16, 16);
-	ui_.text(intToStr(p.getBombRange()), glm::vec2(x + 14.0f, y + 2.0f), 1.0f, COL_WHITE);
-	x += statStep;
-
-	glm::ivec2 sSrc = PowerUp::getSheetCoords(SPEED_UP);
-	ui_.sheet(glm::vec2(x, y), glm::vec2(12.0f, 12.0f), sSrc.x, sSrc.y, 16, 16);
-	ui_.text(intToStr(p.getSpeedUps()), glm::vec2(x + 14.0f, y + 2.0f), 1.0f, COL_WHITE);
+	ui_.text(intToStr(p.getMaxBombs()), glm::vec2(x + 13.0f, y + 2.0f), 1.0f, COL_WHITE);
 	x += 23.0f;
 
-	// Active Vest shield timer pill
-	if(p.hasVest())
+	// Explosion range (Fire Up)
+	glm::ivec2 rSrc = PowerUp::getSheetCoords(BOMB_RANGE);
+	ui_.sheet(glm::vec2(x, y), glm::vec2(12.0f, 12.0f), rSrc.x, rSrc.y, 16, 16);
+	ui_.text(intToStr(p.getBombRange()), glm::vec2(x + 13.0f, y + 2.0f), 1.0f, COL_WHITE);
+	x += 23.0f;
+
+	// Speed Up level
+	glm::ivec2 sSrc = PowerUp::getSheetCoords(SPEED_UP);
+	ui_.sheet(glm::vec2(x, y), glm::vec2(12.0f, 12.0f), sSrc.x, sSrc.y, 16, 16);
+	ui_.text(intToStr(p.getSpeedUps()), glm::vec2(x + 13.0f, y + 2.0f), 1.0f, COL_WHITE);
+	x += 23.0f;
+
+	// "Cor" (Heart Shield) active/inactive indicator
+	glm::ivec2 hSrc = PowerUp::getSheetCoords(HEART_SHIELD);
+	bool hasCor = p.hasHeartShield();
+	ui_.sheet(glm::vec2(x, y), glm::vec2(12.0f, 12.0f), hSrc.x, hSrc.y, 16, 16,
+	          hasCor ? glm::vec4(1.0f, 1.0f, 1.0f, 1.0f) : glm::vec4(0.35f, 0.35f, 0.40f, 0.65f));
+	if(hasCor)
+		ui_.rectOutline(glm::vec2(x - 1.0f, y - 1.0f), glm::vec2(14.0f, 14.0f), COL_GOLD, 1.0f);
+	x += 16.0f;
+
+	// God Mode ('G') active badge
+	if(p.isGodMode())
 	{
-		int secs = int(std::ceil(p.getVestTimer() / 1000.0f));
-		glm::ivec2 vSrc = PowerUp::getSheetCoords(VEST);
-		ui_.sheet(glm::vec2(x, 2.0f), glm::vec2(13.0f, 13.0f), vSrc.x, vSrc.y, 16, 16);
-		std::string secStr = intToStr(secs) + "S";
-		ui_.text(secStr, glm::vec2(x + 15.0f, 5.0f), 1.0f, COL_GOLD);
-		x += 15.0f + ui_.textWidth(secStr, 1.0f) + 5.0f;
+		ui_.rect(glm::vec2(x, 3.0f), glm::vec2(24.0f, 12.0f), glm::vec4(0.18f, 0.55f, 0.25f, 0.95f));
+		ui_.rectOutline(glm::vec2(x, 3.0f), glm::vec2(24.0f, 12.0f), COL_GOLD, 1.0f);
+		ui_.textCentered("GOD", x + 12.0f, 5.0f, 1.0f, COL_GOLD, false);
+		x += 27.0f;
 	}
 
-	// Timer + clickable [II] Pause button
-	std::string timeStr = formatTime(scene_->getElapsedTime());
-	float timeRightX = 292.0f;
-	float timeLeftX = timeRightX - ui_.textWidth(timeStr, 1.0f);
-	ui_.textRight(timeStr, timeRightX, 5.0f, 1.0f, COL_WHITE);
+	// 3. Level indicator + Remaining Enemies (or Open Door alert)
+	std::string lvlTag = "N" + intToStr(scene_->getCurrentLevel());
+	ui_.text(lvlTag, glm::vec2(x, 5.0f), 1.0f, COL_GOLD);
+	x += ui_.textWidth(lvlTag, 1.0f) + 5.0f;
 
-	// Enemies left / Exit door alert
+	// 4. Descending Countdown Timer (turns red when <= 20s remain)
+	float remMs = scene_->getRemainingTime();
+	std::string timeStr = formatTime(remMs);
+	bool lowTime = (remMs <= 20000.0f);
+	glm::vec4 timeCol = lowTime ? (((int(time_ / 200.0f) % 2) == 0) ? COL_RED : COL_GOLD) : COL_WHITE;
+	float timeRightX = 294.0f;
+	float timeLeftX = timeRightX - ui_.textWidth(timeStr, 1.0f);
+	ui_.textRight(timeStr, timeRightX, 5.0f, 1.0f, timeCol);
+
 	int rem = scene_->getEnemiesRemaining();
-	float availRight = timeLeftX - 5.0f;
+	float availRight = timeLeftX - 4.0f;
 	if(rem == 0 && scene_->levelHasExitDoor())
 	{
 		if((int(time_ / 260.0f) % 2) == 0)
 		{
-			std::string doorMsg = UTF8_INV_EX "VE A LA PUERTA!";
-			if(availRight - x < ui_.textWidth(doorMsg, 1.0f))
-				doorMsg = UTF8_INV_EX "PUERTA!";
-			if(availRight - x < ui_.textWidth(doorMsg, 1.0f))
-				doorMsg = "META";
-			float cx = std::max(x + ui_.textWidth(doorMsg, 1.0f) * 0.5f,
-			                    std::min(200.0f, (x + availRight) * 0.5f));
+			std::string doorMsg = "PORTA!";
+			float cx = (x + availRight) * 0.5f;
 			ui_.textCentered(doorMsg, cx, 5.0f, 1.0f, COL_GOLD);
 		}
 	}
@@ -1600,8 +1760,31 @@ void MenuSystem::renderHUD()
 		if(availRight - x < ui_.textWidth(enemStr, 1.0f))
 			enemStr = "E:" + intToStr(rem);
 		float enemW = ui_.textWidth(enemStr, 1.0f);
-		float enemX = std::min(std::max(176.0f, x), availRight - enemW);
+		float enemX = std::min(std::max(x, 168.0f), availRight - enemW);
 		ui_.text(enemStr, glm::vec2(enemX, 5.0f), 1.0f, COL_SKY);
+	}
+
+	// 5. Boss Health / Resistance Bar (displayed on Level 5 while Boss is active)
+	const Enemy *boss = scene_->getActiveBoss();
+	if(boss != NULL)
+	{
+		int bhp = std::max(0, boss->getHp());
+		int bmax = std::max(1, boss->getMaxHp());
+		glm::vec2 barPanel(70.0f, 20.0f), barSz(180.0f, 13.0f);
+		ui_.rect(barPanel, barSz, glm::vec4(0.06f, 0.04f, 0.12f, 0.90f));
+		ui_.rectOutline(barPanel, barSz, COL_RED, 1.0f);
+		ui_.text("BOSS", glm::vec2(barPanel.x + 4.0f, barPanel.y + 3.0f), 1.0f, COL_GOLD);
+
+		float trackX = barPanel.x + 34.0f;
+		float trackW = 114.0f;
+		ui_.rect(glm::vec2(trackX, barPanel.y + 3.0f), glm::vec2(trackW, 7.0f), glm::vec4(0.22f, 0.06f, 0.08f, 1.0f));
+		float fillW = trackW * (float(bhp) / float(bmax));
+		if(fillW > 0.0f)
+		{
+			glm::vec4 hpCol = boss->isDamageFlashing() ? COL_WHITE : ((bhp <= 2) ? COL_RED : COL_GOLD);
+			ui_.rect(glm::vec2(trackX, barPanel.y + 3.0f), glm::vec2(fillW, 7.0f), hpCol);
+		}
+		ui_.textRight(intToStr(bhp) + "/" + intToStr(bmax), barPanel.x + barSz.x - 4.0f, barPanel.y + 3.0f, 1.0f, COL_WHITE);
 	}
 
 	glm::vec2 pauseBtn(298.0f, 2.0f), pauseSz(19.0f, 14.0f);
@@ -1641,12 +1824,10 @@ void MenuSystem::renderPickupBanner()
 	const char *msg = "+MEJORA!";
 	switch(pickupType_)
 	{
-	case EXTRA_BOMB: msg = UTF8_INV_EX "BOMBA EXTRA! (+1 BOMBA)";    break;
-	case BOMB_RANGE: msg = UTF8_INV_EX "MAS FUEGO! (+1 RANGO)";      break;
-	case SPEED_UP:   msg = UTF8_INV_EX "PATINES! (+VELOCIDAD)";      break;
-	case EXTRA_LIFE: msg = UTF8_INV_EX "VIDA EXTRA! (+1 " UTF8_HEART ")"; break;
-	case FULL_FIRE:  msg = UTF8_INV_EX "FUEGO MAXIMO!";              break;
-	case VEST:       msg = UTF8_INV_EX "CHALECO INVENCIBLE!";        break;
+	case EXTRA_BOMB:   msg = "BOMB UP! (+1 BOMBA SIMULTANIA)"; break;
+	case BOMB_RANGE:   msg = "FIRE UP! (+1 ABAST D'EXPLOSIO)"; break;
+	case SPEED_UP:     msg = "SPEED UP! (+VELOCITAT)";         break;
+	case HEART_SHIELD: msg = "COR ACTIVAT! (ESCUT 1 IMPACTE)"; break;
 	default: break;
 	}
 

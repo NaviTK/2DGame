@@ -22,6 +22,7 @@ enum GameState
 	STATE_TITLE,
 	STATE_MAIN_MENU,
 	STATE_CONTROLS,
+	STATE_CREDITS,
 	STATE_SLOT_SELECT,
 	STATE_WORLD_SELECT,
 	STATE_PLAYING,
@@ -73,6 +74,7 @@ private:
 	void updateTitle(int deltaTime);
 	void updateMainMenu(int deltaTime);
 	void updateControls(int deltaTime);
+	void updateCredits(int deltaTime);
 	void updateSlotSelect(int deltaTime);
 	void updateWorldSelect(int deltaTime);
 	void updatePlaying(int deltaTime);
@@ -97,6 +99,7 @@ private:
 	void renderTitle();
 	void renderMainMenu();
 	void renderControls();
+	void renderCredits();
 	void renderSlotSelect();
 	void renderSlotCard(int slot, const glm::vec2 &pos, const glm::vec2 &size, bool selected);
 	void renderWorldSelect();

@@ -18,6 +18,8 @@ struct WorldDef
 	glm::vec4 accentColor;              // Theme UI accent color
 	bool hasPinkEnemy;                  // Enemy preview flags
 	bool hasKirbyEnemy;
+	bool hasJumperEnemy;
+	bool hasBossEnemy;
 };
 
 

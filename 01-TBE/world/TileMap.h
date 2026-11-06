@@ -98,9 +98,10 @@ public:
 	glm::ivec2 worldToTile(const glm::vec2 &worldPos) const;
 	glm::vec2 tileToWorld(const glm::ivec2 &tilePos) const;
 
-	// Spawn points parsed from level tags (PLAYER_SPAWN x y, ENEMY_SPAWN TYPE x y)
+	// Spawn points & level settings parsed from level tags (TIME_LIMIT, PLAYER_SPAWN, ENEMY_SPAWN)
 	const vector<glm::ivec2> &getPlayerSpawns() const;
 	const vector<EnemySpawnInfo> &getEnemySpawns() const;
+	int getTimeLimitSeconds() const { return timeLimitSeconds_; }
 
 	// Collision detection for entity movement
 	bool collisionMoveLeft(const glm::vec2 &pos, const glm::vec2 &size) const;
@@ -132,6 +133,7 @@ private:
 	// Rendered in layer order: 0 first, then 1, then 2.
 	TileCell *map3D_;
 	int defaultSkySprite_;
+	int timeLimitSeconds_;
 	bool zeroIndexedTiles_;
 	bool isNewTileset_;
 

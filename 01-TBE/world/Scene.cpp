@@ -27,6 +27,9 @@ Scene::Scene()
 	gameOver = false;
 	win = false;
 	currentTime = 0.0f;
+	timeLimitMs_ = 120000.0f;
+	remainingTimeMs_ = 120000.0f;
+	timeoutRestartPending_ = false;
 	cameraCenter = glm::vec2(0.0f);
 	cameraViewSize = glm::vec2(160.0f, 120.0f);
 	currentLevel = 1;
@@ -41,7 +44,7 @@ Scene::Scene()
 	endingIsWin_ = false;
 	endTimer_ = 0.0f;
 	score = 0;
-	activeEnemies.reserve(MAX_ENEMIES * 2);
+	activeEnemies.reserve(MAX_ENEMIES * 3 + 4);
 }
 
 Scene::~Scene()
@@ -67,6 +70,8 @@ void Scene::loadLevel(int levelIndex, bool preservePlayerStats)
 	int savedMaxBombs = player.getMaxBombs();
 	int savedBombRange = player.getBombRange();
 	int savedSpeedUps = player.getSpeedUps();
+	bool savedHeart = player.hasHeartShield();
+	bool savedGodMode = player.isGodMode();
 	bool hadAlivePlayer = preservePlayerStats && player.isAlive();
 	currentLevel = levelIndex;
 	currentTime = 0.0f;
@@ -83,6 +88,8 @@ void Scene::loadLevel(int levelIndex, bool preservePlayerStats)
 	powerups.releaseAll();
 	pinkEnemies.releaseAll();
 	kirbyEnemies.releaseAll();
+	jumperEnemies.releaseAll();
+	bossEnemies.releaseAll();
 	activeEnemies.clear();
 	enemyCounted_.clear();
 
@@ -93,8 +100,21 @@ void Scene::loadLevel(int levelIndex, bool preservePlayerStats)
 	}
 
 	const WorldDef *wDef = SaveSystem::instance().getWorldById(levelIndex);
-	string levelFile = (wDef != NULL) ? wDef->levelFile : ((levelIndex == 3) ? "levels/level03.txt" : ((levelIndex == 2) ? "levels/level02.txt" : "levels/level01.txt"));
+	string levelFile = "levels/level01.txt";
+	if(wDef != NULL)
+		levelFile = wDef->levelFile;
+	else if(levelIndex == 5)
+		levelFile = "levels/level05.txt";
+	else if(levelIndex == 4)
+		levelFile = "levels/level04.txt";
+	else if(levelIndex == 3)
+		levelFile = "levels/level03.txt";
+	else if(levelIndex == 2)
+		levelFile = "levels/level02.txt";
+
 	map = TileMap::createTileMap(levelFile, glm::vec2(0.0f), texProgram);
+	timeLimitMs_ = float(map->getTimeLimitSeconds()) * 1000.0f;
+	remainingTimeMs_ = timeLimitMs_;
 
 	float tSize = float(map->getBlockSize());
 
@@ -111,8 +131,9 @@ void Scene::loadLevel(int levelIndex, bool preservePlayerStats)
 	else
 		player.init(map->tileToWorld(glm::ivec2(1, 1)), tSize);
 	player.initSprite(texProgram);
+	player.setGodMode(savedGodMode);
 	if(hadAlivePlayer)
-		player.applyStats(savedLives, savedMaxBombs, savedBombRange, savedSpeedUps);
+		player.applyStats(savedLives, savedMaxBombs, savedBombRange, savedSpeedUps, savedHeart);
 	player.syncInputLatch();
 
 	// Spawn enemies from the level configuration tags (ENEMY_SPAWN <TYPE> <x> <y>)
@@ -121,6 +142,10 @@ void Scene::loadLevel(int levelIndex, bool preservePlayerStats)
 		Enemy *enemy = NULL;
 		if(spawn.type == "KIRBY")
 			enemy = kirbyEnemies.acquire();
+		else if(spawn.type == "JUMPER")
+			enemy = jumperEnemies.acquire();
+		else if(spawn.type == "BOSS")
+			enemy = bossEnemies.acquire();
 		else
 			enemy = pinkEnemies.acquire();
 
@@ -221,6 +246,26 @@ void Scene::update(int deltaTime)
 
 	currentTime += float(deltaTime);
 
+	// Descending countdown timer per level:
+	// If it reaches zero before beating the level, the player loses 1 life and restarts the level
+	// (or immediate Game Over if 0 lives remain).
+	remainingTimeMs_ -= float(deltaTime);
+	if(remainingTimeMs_ <= 0.0f)
+	{
+		remainingTimeMs_ = 0.0f;
+		if(player.loseLifeFromTimeout())
+		{
+			timeoutRestartPending_ = true;
+			loadLevel(currentLevel, true);
+			return;
+		}
+		else
+		{
+			gameOver = true;
+			return;
+		}
+	}
+
 	if(map != NULL)
 		map->update(deltaTime);
 
@@ -289,15 +334,17 @@ void Scene::update(int deltaTime)
 		}
 	}
 
+	// Losing all 3 lives triggers immediate Game Over (returning directly to Main Menu)
 	if(!player.isAlive())
 	{
-		levelEnding_ = true;
-		endingIsWin_ = false;
-		endTimer_ = DEATH_DELAY_MS;
+		gameOver = true;
 		return;
 	}
 
-	// World clear conditions
+	// Level clear condition:
+	// 1. Eliminate all enemies on the map (including Boss on Level 5).
+	// 2. Exit door activates/opens.
+	// 3. Bomberman physically reaches the exit door to advance to the next level.
 	bool cleared = false;
 	if(hasExitDoor_)
 		cleared = allEnemiesCleared && isPlayerOnExitDoor();
@@ -306,9 +353,9 @@ void Scene::update(int deltaTime)
 
 	if(cleared)
 	{
-		levelEnding_ = true;
-		endingIsWin_ = true;
-		endTimer_ = CLEAR_DELAY_MS;
+		win = true;
+		worldClearedPending_ = true;
+		lastClearedWorld_ = currentLevel;
 	}
 }
 
@@ -329,6 +376,40 @@ int Scene::getEnemiesRemaining() const
 	return count;
 }
 
+const Enemy *Scene::getActiveBoss() const
+{
+	for(size_t i = 0; i < activeEnemies.size(); i++)
+	{
+		if(activeEnemies[i]->isActive() && activeEnemies[i]->isBoss())
+			return activeEnemies[i];
+	}
+	return NULL;
+}
+
+void Scene::killAllEnemies()
+{
+	for(size_t i = 0; i < activeEnemies.size(); i++)
+	{
+		if(activeEnemies[i]->isAlive() || activeEnemies[i]->isActive())
+		{
+			activeEnemies[i]->forceKill();
+			if(i < enemyCounted_.size() && !enemyCounted_[i])
+			{
+				enemyCounted_[i] = true;
+				score += SCORE_ENEMY;
+			}
+		}
+	}
+}
+
+bool Scene::consumeTimeoutRestartEvent()
+{
+	if(!timeoutRestartPending_)
+		return false;
+	timeoutRestartPending_ = false;
+	return true;
+}
+
 void Scene::render()
 {
 	// 1. Render tile map
@@ -342,16 +423,21 @@ void Scene::render()
 
 	float tSize = float(map->getBlockSize());
 
-	// 1b. Subtle golden pulse on the exit door once all enemies have been defeated
-	if(hasExitDoor_ && getEnemiesRemaining() == 0)
+	// 1b. Exit door visual state:
+	//     - Closed (red/dark lock overlay) while enemies remain alive
+	//     - Open (golden pulsing glow) once all enemies have been eliminated
+	if(hasExitDoor_)
 	{
-		float alpha = 0.22f + 0.16f * std::sin(currentTime * 0.008f);
+		bool open = (getEnemiesRemaining() == 0);
+		float alpha = open ? (0.26f + 0.18f * std::sin(currentTime * 0.008f)) : 0.42f;
+		glm::vec4 doorOverlay = open ? glm::vec4(1.0f, 0.92f, 0.25f, alpha)
+		                             : glm::vec4(0.18f, 0.05f, 0.08f, alpha);
 		for(int j = 0; j < map->getMapHeight(); j++)
 		{
 			for(int i = 0; i < map->getMapWidth(); i++)
 			{
 				if(map->isExitDoor(i, j))
-					renderQuad(map->tileToWorld(glm::ivec2(i, j)), glm::vec2(tSize, tSize), glm::vec4(1.0f, 0.92f, 0.25f, alpha));
+					renderQuad(map->tileToWorld(glm::ivec2(i, j)), glm::vec2(tSize, tSize), doorOverlay);
 			}
 		}
 	}
@@ -743,15 +829,21 @@ void Scene::handleExplosions()
 			}
 		}
 
-		// Check enemies in currently visible flame tiles
+		// Check enemies (and multi-tile Boss) in currently visible flame tiles
+		float tSize = float(map->getBlockSize());
 		for(size_t k = 0; k < activeEnemies.size(); k++)
 		{
 			if(activeEnemies[k]->isAlive())
 			{
+				glm::vec2 ePos = activeEnemies[k]->getHitboxPos();
+				glm::vec2 eSize = activeEnemies[k]->getHitboxSize();
 				glm::ivec2 eTile = activeEnemies[k]->getTilePosition(map);
 				for(const auto &t : exp.getAffectedTiles())
 				{
-					if(t == eTile)
+					glm::vec2 flamePos = map->tileToWorld(t);
+					bool boxOverlap = (ePos.x < flamePos.x + tSize && ePos.x + eSize.x > flamePos.x &&
+					                   ePos.y < flamePos.y + tSize && ePos.y + eSize.y > flamePos.y);
+					if(t == eTile || boxOverlap)
 					{
 						activeEnemies[k]->kill();
 						break;

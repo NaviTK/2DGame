@@ -65,18 +65,24 @@ public:
 	int getMaxBombs() const;
 	int getActiveBombs() const;
 
-	// Power-ups: 0 = EXTRA_BOMB, 1 = BOMB_RANGE, 2 = SPEED, 3 = EXTRA_LIFE, 4 = FULL_FIRE, 5 = VEST
+	// Power-ups: 0 = EXTRA_BOMB, 1 = BOMB_RANGE, 2 = SPEED_UP, 3 = HEART_SHIELD (Cor)
 	void addPowerUp(int type);
 	int getSpeedUps() const;
+	bool hasHeartShield() const;
+	void setHeartShield(bool active);
+	bool isGodMode() const;
+	void setGodMode(bool enabled);
+	void toggleGodMode();
+	bool loseLifeFromTimeout();
 	bool hasVest() const;
 	float getVestTimer() const;
 
 	// Upgrade caps (shared with the save system and HUD)
-	static const int MAX_LIVES = 9;
+	static const int MAX_LIVES = 3;
 	static const int MAX_BOMBS_CAP = 8;
 	static const int MAX_RANGE_CAP = 8;
 	static const int MAX_SPEED_UPS = 4;
-	void applyStats(int newLives, int newMaxBombs, int newBombRange, int newSpeedUps);
+	void applyStats(int newLives, int newMaxBombs, int newBombRange, int newSpeedUps, bool hasHeart = false);
 	void syncInputLatch();
 	void setBombPlatforms(const std::vector<glm::vec2> &platforms);
 
@@ -90,8 +96,10 @@ private:
 	float tileSize_;
 	int maxBombs, activeBombs, bombRange, speedUps;
 	int lives;
-	float invulnTimer;      // ms remaining of invulnerability (2000 ms after losing a life)
+	float invulnTimer;      // ms remaining of invulnerability (2000 ms after losing a life or consuming Cor)
 	float vestTimer;        // ms remaining of the Vest power-up invincibility
+	bool heartShield_;      // "Cor" (Heart) 1-hit impact shield
+	bool godMode_;          // 'G' debug God Mode toggle
 	bool alive;
 	bool onGround;
 	bool climbing;

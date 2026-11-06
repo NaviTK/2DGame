@@ -3,6 +3,7 @@ MAP_SIZE 18 17
 TILE_SIZE 32 16
 TILESHEET images/tileset_nuevo.png
 TILESHEET_GRID 12 8
+TIME_LIMIT 120
 
 # Mundo 1: Bosque Verde
 # LAYER_0: Marco exterior + fondo de cielo, nubes, horizonte, arboleda y arroyo

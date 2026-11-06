@@ -76,6 +76,12 @@
     <ClCompile Include="entities\enemies\KirbyEnemy.cpp">
       <Filter>entities\enemies</Filter>
     </ClCompile>
+    <ClCompile Include="entities\enemies\JumperEnemy.cpp">
+      <Filter>entities\enemies</Filter>
+    </ClCompile>
+    <ClCompile Include="entities\enemies\BossEnemy.cpp">
+      <Filter>entities\enemies</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core\Game.h">
@@ -133,6 +139,12 @@
       <Filter>entities\enemies</Filter>
     </ClInclude>
     <ClInclude Include="entities\enemies\KirbyEnemy.h">
+      <Filter>entities\enemies</Filter>
+    </ClInclude>
+    <ClInclude Include="entities\enemies\JumperEnemy.h">
+      <Filter>entities\enemies</Filter>
+    </ClInclude>
+    <ClInclude Include="entities\enemies\BossEnemy.h">
       <Filter>entities\enemies</Filter>
     </ClInclude>
   </ItemGroup>

@@ -11,6 +11,8 @@
 #include "Enemy.h"
 #include "PinkEnemy.h"
 #include "KirbyEnemy.h"
+#include "JumperEnemy.h"
+#include "BossEnemy.h"
 #include "Bomb.h"
 #include "Explosion.h"
 #include "PowerUp.h"
@@ -51,13 +53,20 @@ public:
 	bool isWin() const;
 	int getCurrentLevel() const { return currentLevel; }
 	const Player &getPlayer() const { return player; }
+	Player &getPlayerMutable() { return player; }
 	ShaderProgram &getTexProgram() { return texProgram; }
 	ShaderProgram &getSimpleProgram() { return simpleProgram; }
 	float getElapsedTime() const { return currentTime; }
+	float getRemainingTime() const { return remainingTimeMs_; }
+	float getTimeLimit() const { return timeLimitMs_; }
 	int getEnemiesRemaining() const;
+	const Enemy *getActiveBoss() const;
 	int getScore() const { return score; }
 	bool levelHasExitDoor() const { return hasExitDoor_; }
+	bool isDoorOpen() const { return hasExitDoor_ && getEnemiesRemaining() == 0; }
 	bool isPlayerOnExitDoor() const;
+	void killAllEnemies();
+	bool consumeTimeoutRestartEvent();
 
 	void applySaveData(const SaveSlotData &data);
 	void exportSaveData(SaveSlotData &data) const;
@@ -95,7 +104,9 @@ private:
 	Player player;
 	ObjectPool<PinkEnemy, MAX_ENEMIES> pinkEnemies;
 	ObjectPool<KirbyEnemy, MAX_ENEMIES> kirbyEnemies;
-	vector<Enemy *> activeEnemies; // Non-owning pointers into pinkEnemies / kirbyEnemies pools
+	ObjectPool<JumperEnemy, MAX_ENEMIES> jumperEnemies;
+	ObjectPool<BossEnemy, 4> bossEnemies;
+	vector<Enemy *> activeEnemies; // Non-owning pointers into enemy pools
 
 	ObjectPool<Bomb, MAX_BOMBS> bombs;
 	ObjectPool<Explosion, MAX_EXPLOSIONS> explosions;
@@ -105,6 +116,9 @@ private:
 	GLuint quadVAO, quadVBO;
 	GLint quadPosLocation;
 
+	float timeLimitMs_;
+	float remainingTimeMs_;
+	bool timeoutRestartPending_;
 	bool gameOver, win;
 	bool worldClearedPending_;
 	int lastClearedWorld_;
